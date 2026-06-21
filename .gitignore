@@ -1,0 +1,39 @@
+# Xcode
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Build products
+build/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# CocoaPods (if added later)
+Pods/
+
+# Carthage (if added later)
+Carthage/Build/
+
+# Fastlane (if added later)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Secrets — never commit credentials
+.env
+*.pem
