@@ -1,7 +1,6 @@
 import CoreLocation
 import MapKit
 import SwiftUI
-import UIKit
 
 struct RouteTrackingView: View {
     @ObservedObject var locationManager: LocationManager
@@ -17,8 +16,6 @@ struct RouteTrackingView: View {
     @AppStorage("activeOverlayBoundaryId") private var activeOverlayBoundaryIdRaw = ""
     @State private var showRouteHistory = false
     @State private var showAreaBoundaries = false
-    @State private var baselineSegmentMarkerIDs: Set<UUID> = []
-    @State private var dropAnimationMarkerIDs: Set<UUID> = []
     @Environment(\.openURL) private var openURL
 
     private var overlayBoundaryId: UUID? {
@@ -96,17 +93,9 @@ struct RouteTrackingView: View {
             }
         }
         .onAppear {
-            syncSegmentMarkerBaseline()
             presentPausedRouteNamingIfNeeded()
             restoreRouteHistoryIfNeeded()
             syncActiveBoundaryOverlay()
-        }
-        .onChange(of: locationManager.activeRouteId) { _, _ in
-            dropAnimationMarkerIDs = []
-            syncSegmentMarkerBaseline()
-        }
-        .onChange(of: locationManager.segmentMarkers.map(\.id)) { _, _ in
-            scheduleSegmentMarkerDropAnimations()
         }
         .onChange(of: locationManager.needsPausedRouteNaming) { _, needed in
             if needed {
@@ -241,12 +230,7 @@ struct RouteTrackingView: View {
 
             ForEach(locationManager.segmentMarkers) { marker in
                 Annotation("", coordinate: marker.coordinate, anchor: .bottom) {
-                    RouteSegmentMarkerView(
-                        label: marker.label,
-                        animateDrop: dropAnimationMarkerIDs.contains(marker.id)
-                    ) {
-                        completeSegmentMarkerDropAnimation(marker.id)
-                    }
+                    RouteSegmentMarkerView(label: marker.label)
                 }
             }
 
@@ -488,27 +472,6 @@ struct RouteTrackingView: View {
     private func syncActiveBoundaryOverlay() {
         locationManager.setActiveBoundaryOverlay(coordinates: overlayBoundary?.coordinates)
     }
-
-    private func syncSegmentMarkerBaseline() {
-        baselineSegmentMarkerIDs = Set(locationManager.segmentMarkers.map(\.id))
-    }
-
-    private func scheduleSegmentMarkerDropAnimations() {
-        guard locationManager.isViewingActiveRoute else { return }
-
-        for marker in locationManager.segmentMarkers {
-            guard !baselineSegmentMarkerIDs.contains(marker.id),
-                  !dropAnimationMarkerIDs.contains(marker.id) else {
-                continue
-            }
-            dropAnimationMarkerIDs.insert(marker.id)
-        }
-    }
-
-    private func completeSegmentMarkerDropAnimation(_ markerID: UUID) {
-        dropAnimationMarkerIDs.remove(markerID)
-        baselineSegmentMarkerIDs.insert(markerID)
-    }
 }
 
 private struct LiveRecordingElapsedView: View {
@@ -541,42 +504,8 @@ private enum EndRouteNamingSheetMode {
 
 private struct RouteSegmentMarkerView: View {
     let label: String
-    var animateDrop = false
-    var onDropAnimationFinished: (() -> Void)?
-
-    @State private var dropOffset: CGFloat
-    @State private var scaleX: CGFloat = 1
-    @State private var scaleY: CGFloat = 1
-    @State private var committedToDropAnimation = false
-
-    init(
-        label: String,
-        animateDrop: Bool = false,
-        onDropAnimationFinished: (() -> Void)? = nil
-    ) {
-        self.label = label
-        self.animateDrop = animateDrop
-        self.onDropAnimationFinished = onDropAnimationFinished
-        _dropOffset = State(
-            initialValue: animateDrop ? -UIScreen.main.bounds.height : 0
-        )
-    }
 
     var body: some View {
-        markerContent
-            .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
-            .offset(y: dropOffset)
-            .onAppear {
-                playDropAnimationIfNeeded()
-            }
-            .onChange(of: animateDrop) { _, shouldAnimate in
-                if shouldAnimate {
-                    playDropAnimationIfNeeded()
-                }
-            }
-    }
-
-    private var markerContent: some View {
         VStack(spacing: 0) {
             ZStack {
                 Circle()
@@ -591,48 +520,6 @@ private struct RouteSegmentMarkerView: View {
                 .fill(.black)
                 .frame(width: 14, height: 10)
                 .offset(y: -3)
-        }
-    }
-
-    private func playDropAnimationIfNeeded() {
-        guard animateDrop, !committedToDropAnimation else { return }
-        committedToDropAnimation = true
-        dropOffset = -UIScreen.main.bounds.height
-
-        let runDrop = {
-            withAnimation(.easeIn(duration: 0.55)) {
-                dropOffset = 0
-            } completion: {
-                playLandingSquashAndBounce()
-            }
-        }
-
-        if label == "A" {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(200))
-                runDrop()
-            }
-        } else {
-            runDrop()
-        }
-    }
-
-    private func playLandingSquashAndBounce() {
-        withAnimation(.easeOut(duration: 0.08)) {
-            scaleY = 0.6
-            scaleX = 1.3
-        } completion: {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.42)) {
-                scaleY = 1.1
-                scaleX = 0.92
-            } completion: {
-                withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
-                    scaleY = 1
-                    scaleX = 1
-                } completion: {
-                    onDropAnimationFinished?()
-                }
-            }
         }
     }
 }
