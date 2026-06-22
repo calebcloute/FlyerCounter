@@ -1,7 +1,6 @@
 import CoreLocation
 import MapKit
 import SwiftUI
-import UIKit
 
 struct RouteTrackingView: View {
     @ObservedObject var locationManager: LocationManager
@@ -18,6 +17,7 @@ struct RouteTrackingView: View {
     @State private var showRouteHistory = false
     @State private var showAreaBoundaries = false
     @State private var baselineSegmentMarkerIDs: Set<UUID> = []
+    @State private var pendingMarkerDrops: [PendingMarkerDrop] = []
     @Environment(\.openURL) private var openURL
 
     private var overlayBoundaryId: UUID? {
@@ -101,7 +101,11 @@ struct RouteTrackingView: View {
             syncActiveBoundaryOverlay()
         }
         .onChange(of: locationManager.activeRouteId) { _, _ in
+            pendingMarkerDrops = []
             syncSegmentMarkerBaseline()
+        }
+        .onChange(of: locationManager.segmentMarkers.map(\.id)) { _, _ in
+            queueSegmentMarkerDropAnimations()
         }
         .onChange(of: locationManager.needsPausedRouteNaming) { _, needed in
             if needed {
@@ -220,6 +224,30 @@ struct RouteTrackingView: View {
     }
 
     private var map: some View {
+        MapReader { proxy in
+            ZStack {
+                mapLayer
+
+                ForEach(pendingMarkerDrops) { pending in
+                    if let targetPoint = proxy.convert(pending.coordinate, to: .local) {
+                        SegmentMarkerDropOverlay(
+                            label: pending.label,
+                            targetPoint: targetPoint
+                        ) {
+                            completeMarkerDrop(id: pending.id)
+                        }
+                    } else {
+                        Color.clear
+                            .onAppear {
+                                completeMarkerDrop(id: pending.id)
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    private var mapLayer: some View {
         Map(position: $cameraPosition) {
             if locationManager.isLocationAuthorized && locationManager.isViewingActiveRoute {
                 UserAnnotation()
@@ -235,12 +263,9 @@ struct RouteTrackingView: View {
             }
 
             ForEach(locationManager.segmentMarkers) { marker in
-                Annotation("", coordinate: marker.coordinate, anchor: .bottom) {
-                    RouteSegmentMarkerView(
-                        label: marker.label,
-                        animateDrop: shouldAnimateSegmentMarkerDrop(marker)
-                    ) {
-                        markSegmentMarkerDropAnimated(marker.id)
+                if !isMarkerPendingDrop(marker.id) {
+                    Annotation("", coordinate: marker.coordinate, anchor: .bottom) {
+                        RouteSegmentMarkerPin(label: marker.label)
                     }
                 }
             }
@@ -488,13 +513,32 @@ struct RouteTrackingView: View {
         baselineSegmentMarkerIDs = Set(locationManager.segmentMarkers.map(\.id))
     }
 
-    private func markSegmentMarkerDropAnimated(_ markerID: UUID) {
-        baselineSegmentMarkerIDs.insert(markerID)
+    private func queueSegmentMarkerDropAnimations() {
+        guard locationManager.isViewingActiveRoute else { return }
+
+        for marker in locationManager.segmentMarkers {
+            guard !baselineSegmentMarkerIDs.contains(marker.id),
+                  !pendingMarkerDrops.contains(where: { $0.id == marker.id }) else {
+                continue
+            }
+
+            pendingMarkerDrops.append(
+                PendingMarkerDrop(
+                    id: marker.id,
+                    label: marker.label,
+                    coordinate: marker.coordinate
+                )
+            )
+        }
     }
 
-    private func shouldAnimateSegmentMarkerDrop(_ marker: RouteSegmentMarker) -> Bool {
-        locationManager.isViewingActiveRoute
-            && !baselineSegmentMarkerIDs.contains(marker.id)
+    private func completeMarkerDrop(id: UUID) {
+        baselineSegmentMarkerIDs.insert(id)
+        pendingMarkerDrops.removeAll { $0.id == id }
+    }
+
+    private func isMarkerPendingDrop(_ id: UUID) -> Bool {
+        pendingMarkerDrops.contains { $0.id == id }
     }
 }
 
@@ -526,39 +570,16 @@ private enum EndRouteNamingSheetMode {
     case pausedRouteOnReopen
 }
 
-private struct RouteSegmentMarkerView: View {
+private struct PendingMarkerDrop: Identifiable {
+    let id: UUID
     let label: String
-    var animateDrop = false
-    var onDropAnimationStarted: (() -> Void)?
+    let coordinate: CLLocationCoordinate2D
+}
 
-    @State private var dropOffset: CGFloat
-    @State private var scaleX: CGFloat = 1
-    @State private var scaleY: CGFloat = 1
-    @State private var didPlayDropAnimation = false
-
-    init(
-        label: String,
-        animateDrop: Bool = false,
-        onDropAnimationStarted: (() -> Void)? = nil
-    ) {
-        self.label = label
-        self.animateDrop = animateDrop
-        self.onDropAnimationStarted = onDropAnimationStarted
-        _dropOffset = State(
-            initialValue: animateDrop ? -UIScreen.main.bounds.height : 0
-        )
-    }
+private struct RouteSegmentMarkerPin: View {
+    let label: String
 
     var body: some View {
-        markerContent
-            .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
-            .offset(y: dropOffset)
-            .onAppear {
-                playDropAnimationIfNeeded()
-            }
-    }
-
-    private var markerContent: some View {
         VStack(spacing: 0) {
             ZStack {
                 Circle()
@@ -575,15 +596,40 @@ private struct RouteSegmentMarkerView: View {
                 .offset(y: -3)
         }
     }
+}
+
+private struct SegmentMarkerDropOverlay: View {
+    let label: String
+    let targetPoint: CGPoint
+    let onComplete: () -> Void
+
+    private static let pinHeight: CGFloat = 38
+
+    @State private var bottomY: CGFloat = 0
+    @State private var scaleX: CGFloat = 1
+    @State private var scaleY: CGFloat = 1
+    @State private var didStartAnimation = false
+
+    var body: some View {
+        RouteSegmentMarkerPin(label: label)
+            .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
+            .position(
+                x: targetPoint.x,
+                y: bottomY - Self.pinHeight / 2
+            )
+            .allowsHitTesting(false)
+            .onAppear {
+                playDropAnimationIfNeeded()
+            }
+    }
 
     private func playDropAnimationIfNeeded() {
-        guard animateDrop, !didPlayDropAnimation else { return }
-
-        didPlayDropAnimation = true
-        onDropAnimationStarted?()
+        guard !didStartAnimation else { return }
+        didStartAnimation = true
+        bottomY = 0
 
         withAnimation(.easeIn(duration: 0.55)) {
-            dropOffset = 0
+            bottomY = targetPoint.y
         } completion: {
             playLandingSquashAndBounce()
         }
@@ -601,6 +647,8 @@ private struct RouteSegmentMarkerView: View {
                 withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
                     scaleY = 1
                     scaleX = 1
+                } completion: {
+                    onComplete()
                 }
             }
         }
