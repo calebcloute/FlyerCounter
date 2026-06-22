@@ -237,8 +237,22 @@ struct RouteTrackingView: View {
             }
 
             if locationManager.routeCoordinates.count >= 2 {
-                MapPolyline(coordinates: locationManager.routeCoordinates)
-                    .stroke(.blue, lineWidth: 4)
+                ForEach(Array(locationManager.walkingRouteSegments.enumerated()), id: \.offset) { _, segment in
+                    if segment.count >= 2 {
+                        MapPolyline(coordinates: segment)
+                            .stroke(.blue, lineWidth: 4)
+                    }
+                }
+
+                ForEach(Array(locationManager.walkingRouteGapConnections.enumerated()), id: \.offset) { _, gap in
+                    if gap.count >= 2 {
+                        MapPolyline(coordinates: gap)
+                            .stroke(
+                                .blue,
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round, dash: [8, 7])
+                            )
+                    }
+                }
             }
 
             if let overlayBoundary = overlayBoundary {

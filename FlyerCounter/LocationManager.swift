@@ -36,6 +36,14 @@ final class LocationManager: NSObject, ObservableObject {
         displayedRoute?.routePoints.map { $0.coordinate } ?? []
     }
 
+    var walkingRouteSegments: [[CLLocationCoordinate2D]] {
+        displayedRoute?.walkingSegmentsCoordinates() ?? []
+    }
+
+    var walkingRouteGapConnections: [[CLLocationCoordinate2D]] {
+        displayedRoute?.walkingGapConnections() ?? []
+    }
+
     var flyerDrops: [FlyerDrop] {
         displayedRoute?.flyerDrops ?? []
     }
@@ -357,7 +365,8 @@ final class LocationManager: NSObject, ObservableObject {
             routePoints: [],
             flyerDrops: [],
             flyerCount: 0,
-            segmentMarkers: nil
+            segmentMarkers: nil,
+            walkingSegmentStartIndices: [0]
         )
 
         routes.insert(route, at: 0)
@@ -379,6 +388,7 @@ final class LocationManager: NSObject, ObservableObject {
             route.endedAt = nil
             route.pausedAt = nil
             route.beginRecordingSegment()
+            route.markWalkingSegmentResume()
         }
 
         if let lastCoordinate = activeRoute?.routePoints.last?.coordinate {

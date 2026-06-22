@@ -17,6 +17,8 @@ struct RouteRecord: Identifiable, Codable {
     var flyerDrops: [FlyerDrop]
     var flyerCount: Int
     var segmentMarkers: [RouteSegmentMarker]?
+    /// Indices in `routePoints` where each walked segment begins after a pause/resume.
+    var walkingSegmentStartIndices: [Int]?
 
     var resolvedSegmentMarkers: [RouteSegmentMarker] {
         segmentMarkers ?? []
@@ -47,17 +49,76 @@ struct RouteRecord: Identifiable, Codable {
     }
 
     var distanceWalked: CLLocationDistance {
-        guard routePoints.count >= 2 else { return 0 }
+        walkingSegmentsCoordinates().reduce(0) { total, segment in
+            total + Self.distance(along: segment)
+        }
+    }
+
+    var resolvedWalkingSegmentStartIndices: [Int] {
+        let starts = walkingSegmentStartIndices ?? [0]
+        return starts.isEmpty ? [0] : starts.sorted()
+    }
+
+    func walkingSegmentsCoordinates() -> [[CLLocationCoordinate2D]] {
+        guard !routePoints.isEmpty else { return [] }
+
+        let starts = resolvedWalkingSegmentStartIndices
+        var segments: [[CLLocationCoordinate2D]] = []
+
+        for (index, start) in starts.enumerated() {
+            guard start < routePoints.count else { continue }
+
+            let end = index + 1 < starts.count
+                ? min(starts[index + 1], routePoints.count)
+                : routePoints.count
+            guard start < end else { continue }
+
+            segments.append(routePoints[start..<end].map(\.coordinate))
+        }
+
+        if segments.isEmpty {
+            return [routePoints.map(\.coordinate)]
+        }
+
+        return segments
+    }
+
+    func walkingGapConnections() -> [[CLLocationCoordinate2D]] {
+        let segments = walkingSegmentsCoordinates()
+        guard segments.count >= 2 else { return [] }
+
+        var gaps: [[CLLocationCoordinate2D]] = []
+        for index in 0..<(segments.count - 1) {
+            guard let last = segments[index].last,
+                  let first = segments[index + 1].first else {
+                continue
+            }
+            gaps.append([last, first])
+        }
+        return gaps
+    }
+
+    mutating func markWalkingSegmentResume() {
+        var starts = walkingSegmentStartIndices ?? [0]
+        let nextStart = routePoints.count
+        if starts.last != nextStart {
+            starts.append(nextStart)
+        }
+        walkingSegmentStartIndices = starts
+    }
+
+    private static func distance(along coordinates: [CLLocationCoordinate2D]) -> CLLocationDistance {
+        guard coordinates.count >= 2 else { return 0 }
 
         var total: CLLocationDistance = 0
-        for index in 1..<routePoints.count {
+        for index in 1..<coordinates.count {
             let previous = CLLocation(
-                latitude: routePoints[index - 1].latitude,
-                longitude: routePoints[index - 1].longitude
+                latitude: coordinates[index - 1].latitude,
+                longitude: coordinates[index - 1].longitude
             )
             let current = CLLocation(
-                latitude: routePoints[index].latitude,
-                longitude: routePoints[index].longitude
+                latitude: coordinates[index].latitude,
+                longitude: coordinates[index].longitude
             )
             total += current.distance(from: previous)
         }
@@ -143,6 +204,7 @@ struct RouteRecord: Identifiable, Codable {
         case flyerDrops
         case flyerCount
         case segmentMarkers
+        case walkingSegmentStartIndices
     }
 
     init(
@@ -160,7 +222,8 @@ struct RouteRecord: Identifiable, Codable {
         routePoints: [StoredCoordinate],
         flyerDrops: [FlyerDrop],
         flyerCount: Int,
-        segmentMarkers: [RouteSegmentMarker]?
+        segmentMarkers: [RouteSegmentMarker]?,
+        walkingSegmentStartIndices: [Int]? = nil
     ) {
         self.id = id
         self.name = name
@@ -177,6 +240,7 @@ struct RouteRecord: Identifiable, Codable {
         self.flyerDrops = flyerDrops
         self.flyerCount = flyerCount
         self.segmentMarkers = segmentMarkers
+        self.walkingSegmentStartIndices = walkingSegmentStartIndices
     }
 
     init(from decoder: Decoder) throws {
@@ -202,6 +266,10 @@ struct RouteRecord: Identifiable, Codable {
         flyerDrops = try container.decode([FlyerDrop].self, forKey: .flyerDrops)
         flyerCount = try container.decode(Int.self, forKey: .flyerCount)
         segmentMarkers = try container.decodeIfPresent([RouteSegmentMarker].self, forKey: .segmentMarkers)
+        walkingSegmentStartIndices = try container.decodeIfPresent(
+            [Int].self,
+            forKey: .walkingSegmentStartIndices
+        )
     }
 }
 
