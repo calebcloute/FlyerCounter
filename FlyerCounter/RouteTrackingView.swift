@@ -16,6 +16,8 @@ struct RouteTrackingView: View {
     @AppStorage("activeOverlayBoundaryId") private var activeOverlayBoundaryIdRaw = ""
     @State private var showRouteHistory = false
     @State private var showAreaBoundaries = false
+    @State private var isControlPanelCollapsed = false
+    @State private var controlPanelDragOffset: CGFloat = 0
     @Environment(\.openURL) private var openURL
 
     private var overlayBoundaryId: UUID? {
@@ -31,8 +33,8 @@ struct RouteTrackingView: View {
 
     var body: some View {
         map
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                controlPanel
+            .overlay(alignment: .bottom) {
+                collapsibleControlPanel
             }
             .overlay(alignment: .top) {
                 if !locationManager.isViewingActiveRoute, let route = locationManager.displayedRoute {
@@ -262,7 +264,88 @@ struct RouteTrackingView: View {
     }
 
     @ViewBuilder
-    private var controlPanel: some View {
+    private var collapsibleControlPanel: some View {
+        VStack(spacing: 0) {
+            controlPanelDragHandle
+
+            controlPanelContent
+                .frame(maxWidth: .infinity, alignment: .top)
+                .frame(maxHeight: isControlPanelCollapsed ? 0 : nil, alignment: .top)
+                .clipped()
+                .opacity(isControlPanelCollapsed ? 0 : 1)
+                .allowsHitTesting(!isControlPanelCollapsed)
+        }
+        .background(.ultraThinMaterial)
+        .clipShape(
+            UnevenRoundedRectangle(
+                topLeadingRadius: 16,
+                topTrailingRadius: 16
+            )
+        )
+        .offset(y: controlPanelDragOffset)
+        .gesture(controlPanelDragGesture)
+        .animation(.spring(response: 0.35, dampingFraction: 0.86), value: isControlPanelCollapsed)
+    }
+
+    private var controlPanelDragHandle: some View {
+        VStack(spacing: 6) {
+            Capsule()
+                .fill(.secondary.opacity(0.45))
+                .frame(width: 40, height: 5)
+
+            if isControlPanelCollapsed {
+                Image(systemName: "chevron.up")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.top, 10)
+        .padding(.bottom, isControlPanelCollapsed ? 12 : 6)
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            toggleControlPanelCollapsed()
+        }
+    }
+
+    private var controlPanelDragGesture: some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { value in
+                let translation = value.translation.height
+                if isControlPanelCollapsed {
+                    controlPanelDragOffset = min(0, translation)
+                } else {
+                    controlPanelDragOffset = max(0, translation)
+                }
+            }
+            .onEnded { value in
+                let threshold: CGFloat = 72
+                let translation = value.translation.height
+                let predicted = value.predictedEndTranslation.height
+
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+                    if isControlPanelCollapsed {
+                        if translation < -threshold || predicted < -threshold {
+                            isControlPanelCollapsed = false
+                        }
+                    } else if translation > threshold || predicted > threshold {
+                        isControlPanelCollapsed = true
+                    }
+                    controlPanelDragOffset = 0
+                }
+            }
+    }
+
+    private func toggleControlPanelCollapsed() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.86)) {
+            isControlPanelCollapsed.toggle()
+            controlPanelDragOffset = 0
+        }
+        haptic(.light)
+    }
+
+    @ViewBuilder
+    private var controlPanelContent: some View {
         VStack(spacing: 16) {
             if let statusMessage = locationManager.statusMessage {
                 Text(statusMessage)
@@ -360,7 +443,6 @@ struct RouteTrackingView: View {
             }
         }
         .padding()
-        .background(.ultraThinMaterial)
     }
 
     private func routeTimestampLabel(for route: RouteRecord) -> some View {
