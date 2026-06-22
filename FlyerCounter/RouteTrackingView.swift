@@ -1,6 +1,7 @@
 import CoreLocation
 import MapKit
 import SwiftUI
+import UIKit
 
 struct RouteTrackingView: View {
     @ObservedObject var locationManager: LocationManager
@@ -16,6 +17,7 @@ struct RouteTrackingView: View {
     @AppStorage("activeOverlayBoundaryId") private var activeOverlayBoundaryIdRaw = ""
     @State private var showRouteHistory = false
     @State private var showAreaBoundaries = false
+    @State private var baselineSegmentMarkerIDs: Set<UUID> = []
     @Environment(\.openURL) private var openURL
 
     private var overlayBoundaryId: UUID? {
@@ -93,9 +95,13 @@ struct RouteTrackingView: View {
             }
         }
         .onAppear {
+            syncSegmentMarkerBaseline()
             presentPausedRouteNamingIfNeeded()
             restoreRouteHistoryIfNeeded()
             syncActiveBoundaryOverlay()
+        }
+        .onChange(of: locationManager.activeRouteId) { _, _ in
+            syncSegmentMarkerBaseline()
         }
         .onChange(of: locationManager.needsPausedRouteNaming) { _, needed in
             if needed {
@@ -230,7 +236,12 @@ struct RouteTrackingView: View {
 
             ForEach(locationManager.segmentMarkers) { marker in
                 Annotation("", coordinate: marker.coordinate, anchor: .bottom) {
-                    RouteSegmentMarkerView(label: marker.label)
+                    RouteSegmentMarkerView(
+                        label: marker.label,
+                        animateDrop: shouldAnimateSegmentMarkerDrop(marker)
+                    ) {
+                        markSegmentMarkerDropAnimated(marker.id)
+                    }
                 }
             }
 
@@ -472,6 +483,19 @@ struct RouteTrackingView: View {
     private func syncActiveBoundaryOverlay() {
         locationManager.setActiveBoundaryOverlay(coordinates: overlayBoundary?.coordinates)
     }
+
+    private func syncSegmentMarkerBaseline() {
+        baselineSegmentMarkerIDs = Set(locationManager.segmentMarkers.map(\.id))
+    }
+
+    private func markSegmentMarkerDropAnimated(_ markerID: UUID) {
+        baselineSegmentMarkerIDs.insert(markerID)
+    }
+
+    private func shouldAnimateSegmentMarkerDrop(_ marker: RouteSegmentMarker) -> Bool {
+        locationManager.isViewingActiveRoute
+            && !baselineSegmentMarkerIDs.contains(marker.id)
+    }
 }
 
 private struct LiveRecordingElapsedView: View {
@@ -504,8 +528,37 @@ private enum EndRouteNamingSheetMode {
 
 private struct RouteSegmentMarkerView: View {
     let label: String
+    var animateDrop = false
+    var onDropAnimationStarted: (() -> Void)?
+
+    @State private var dropOffset: CGFloat
+    @State private var scaleX: CGFloat = 1
+    @State private var scaleY: CGFloat = 1
+    @State private var didPlayDropAnimation = false
+
+    init(
+        label: String,
+        animateDrop: Bool = false,
+        onDropAnimationStarted: (() -> Void)? = nil
+    ) {
+        self.label = label
+        self.animateDrop = animateDrop
+        self.onDropAnimationStarted = onDropAnimationStarted
+        _dropOffset = State(
+            initialValue: animateDrop ? -UIScreen.main.bounds.height : 0
+        )
+    }
 
     var body: some View {
+        markerContent
+            .scaleEffect(x: scaleX, y: scaleY, anchor: .bottom)
+            .offset(y: dropOffset)
+            .onAppear {
+                playDropAnimationIfNeeded()
+            }
+    }
+
+    private var markerContent: some View {
         VStack(spacing: 0) {
             ZStack {
                 Circle()
@@ -520,6 +573,36 @@ private struct RouteSegmentMarkerView: View {
                 .fill(.black)
                 .frame(width: 14, height: 10)
                 .offset(y: -3)
+        }
+    }
+
+    private func playDropAnimationIfNeeded() {
+        guard animateDrop, !didPlayDropAnimation else { return }
+
+        didPlayDropAnimation = true
+        onDropAnimationStarted?()
+
+        withAnimation(.easeIn(duration: 0.55)) {
+            dropOffset = 0
+        } completion: {
+            playLandingSquashAndBounce()
+        }
+    }
+
+    private func playLandingSquashAndBounce() {
+        withAnimation(.easeOut(duration: 0.08)) {
+            scaleY = 0.6
+            scaleX = 1.3
+        } completion: {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.42)) {
+                scaleY = 1.1
+                scaleX = 0.92
+            } completion: {
+                withAnimation(.spring(response: 0.22, dampingFraction: 0.72)) {
+                    scaleY = 1
+                    scaleX = 1
+                }
+            }
         }
     }
 }
