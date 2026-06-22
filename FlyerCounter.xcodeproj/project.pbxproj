@@ -10,7 +10,6 @@
 		A10000010000000000000001 /* FlyerCounterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000001 /* FlyerCounterApp.swift */; };
 		A10000010000000000000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000002 /* ContentView.swift */; };
 		A10000010000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000003 /* Assets.xcassets */; };
-		A10000010000000000000004 /* ManualCountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000004 /* ManualCountView.swift */; };
 		A10000010000000000000005 /* RouteTrackingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000005 /* RouteTrackingView.swift */; };
 		A10000010000000000000006 /* LocationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000006 /* LocationManager.swift */; };
 		A10000010000000000000007 /* FlyerDrop.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000007 /* FlyerDrop.swift */; };
@@ -30,7 +29,6 @@
 /* Begin PBXFileReference section */
 		A10000020000000000000001 /* FlyerCounterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlyerCounterApp.swift; sourceTree = "<group>"; };
 		A10000020000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		A10000020000000000000004 /* ManualCountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ManualCountView.swift; sourceTree = "<group>"; };
 		A10000020000000000000005 /* RouteTrackingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteTrackingView.swift; sourceTree = "<group>"; };
 		A10000020000000000000006 /* LocationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationManager.swift; sourceTree = "<group>"; };
 		A10000020000000000000007 /* FlyerDrop.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlyerDrop.swift; sourceTree = "<group>"; };
@@ -73,7 +71,6 @@
 			children = (
 				A10000020000000000000001 /* FlyerCounterApp.swift */,
 				A10000020000000000000002 /* ContentView.swift */,
-				A10000020000000000000004 /* ManualCountView.swift */,
 				A10000020000000000000005 /* RouteTrackingView.swift */,
 				A10000020000000000000006 /* LocationManager.swift */,
 				A10000020000000000000007 /* FlyerDrop.swift */,
@@ -171,7 +168,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10000010000000000000002 /* ContentView.swift in Sources */,
-				A10000010000000000000004 /* ManualCountView.swift in Sources */,
 				A10000010000000000000005 /* RouteTrackingView.swift in Sources */,
 				A10000010000000000000006 /* LocationManager.swift in Sources */,
 				A10000010000000000000007 /* FlyerDrop.swift in Sources */,

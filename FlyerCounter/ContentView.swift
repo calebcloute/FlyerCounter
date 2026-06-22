@@ -1,9 +1,8 @@
 import SwiftUI
 
 private enum AppTab: Int {
-    case manualCount = 0
-    case routeTracking = 1
-    case preferences = 2
+    case routeTracking = 0
+    case preferences = 1
 }
 
 struct ContentView: View {
@@ -18,12 +17,6 @@ struct ContentView: View {
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            ManualCountView()
-                .tabItem {
-                    Label("Manual Count", systemImage: "hand.tap")
-                }
-                .tag(AppTab.manualCount.rawValue)
-
             NavigationStack {
                 RouteTrackingView(locationManager: locationManager)
             }
@@ -42,6 +35,7 @@ struct ContentView: View {
         .environmentObject(neighborhoodTypesStore)
         .environmentObject(areaBoundariesStore)
         .onAppear {
+            migrateSelectedTabIfNeeded()
             locationManager.prepareForUse()
             syncActiveBoundaryOverlay()
             showRouteTrackingForPausedNamingIfNeeded()
@@ -55,6 +49,17 @@ struct ContentView: View {
                 syncActiveBoundaryOverlay()
                 showRouteTrackingForPausedNamingIfNeeded()
             }
+        }
+    }
+
+    private func migrateSelectedTabIfNeeded() {
+        switch selectedTab {
+        case 1:
+            selectedTab = AppTab.routeTracking.rawValue
+        case 2:
+            selectedTab = AppTab.preferences.rawValue
+        default:
+            break
         }
     }
 
