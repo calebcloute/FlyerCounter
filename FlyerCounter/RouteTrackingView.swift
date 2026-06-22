@@ -110,6 +110,16 @@ struct RouteTrackingView: View {
         .onChange(of: showRouteHistory) { _, isOpen in
             routeHistoryWasOpen = isOpen
         }
+        .onChange(of: showEndRouteNaming) { _, isPresented in
+            if isPresented {
+                prepareRouteNamingFormFromActiveRoute()
+            }
+        }
+        .onChange(of: showPausedRouteNaming) { _, isPresented in
+            if isPresented {
+                prepareRouteNamingFormFromActiveRoute()
+            }
+        }
         .sheet(isPresented: $showEndRouteNaming) {
             EndRouteNamingSheet(
                 mode: .endRoute,
@@ -401,7 +411,7 @@ struct RouteTrackingView: View {
                 .disabled(!locationManager.canRemoveLastFlyerDrop)
 
                 Button("End Route", role: .destructive) {
-                    routeName = ""
+                    prepareRouteNamingFormFromActiveRoute()
                     showEndRouteNaming = true
                 }
                 .buttonStyle(.bordered)
@@ -561,8 +571,12 @@ struct RouteTrackingView: View {
 
     private func presentPausedRouteNamingIfNeeded() {
         guard locationManager.needsPausedRouteNaming, !showPausedRouteNaming else { return }
-        routeName = ""
+        prepareRouteNamingFormFromActiveRoute()
         showPausedRouteNaming = true
+    }
+
+    private func prepareRouteNamingFormFromActiveRoute() {
+        routeName = locationManager.activeRoute?.trimmedName ?? ""
     }
 
     private func syncActiveBoundaryOverlay() {
@@ -635,6 +649,8 @@ private struct EndRouteNamingSheet: View {
     let mode: EndRouteNamingSheetMode
     @Binding var routeName: String
     @ObservedObject var locationManager: LocationManager
+    @EnvironmentObject private var routeMethodsStore: RouteMethodsStore
+    @EnvironmentObject private var neighborhoodTypesStore: NeighborhoodTypesStore
     let onEnd: (String, String?, String?, String?) -> Void
     let onResume: () -> Void
 
@@ -716,6 +732,7 @@ private struct EndRouteNamingSheet: View {
                 if mode == .endRoute {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("Resume") {
+                            saveDraftToActiveRouteIfPossible()
                             onResume()
                         }
                     }
@@ -733,16 +750,94 @@ private struct EndRouteNamingSheet: View {
                 }
             }
             .onAppear {
-                selectedMethod = RouteMethodsStorage.noneOption
-                otherMethodText = ""
-                selectedNeighborhoodType = NeighborhoodTypesStorage.noneOption
-                otherNeighborhoodTypeText = ""
-                selectedHighlighterColor = HighlighterColors.noneOption
-                otherHighlighterColorText = ""
+                initializeFormFromActiveRoute()
             }
         }
         .presentationDetents([.large])
         .interactiveDismissDisabled(mode == .pausedRouteOnReopen)
+    }
+
+    private func initializeFormFromActiveRoute() {
+        guard let route = locationManager.activeRoute else {
+            resetPickerFields()
+            return
+        }
+
+        if let name = route.trimmedName {
+            routeName = name
+        }
+
+        initializeMethodSelection(from: route)
+        initializeNeighborhoodTypeSelection(from: route)
+        initializeHighlighterColorSelection(from: route)
+    }
+
+    private func resetPickerFields() {
+        selectedMethod = RouteMethodsStorage.noneOption
+        otherMethodText = ""
+        selectedNeighborhoodType = NeighborhoodTypesStorage.noneOption
+        otherNeighborhoodTypeText = ""
+        selectedHighlighterColor = HighlighterColors.noneOption
+        otherHighlighterColorText = ""
+    }
+
+    private func initializeMethodSelection(from route: RouteRecord) {
+        guard let method = route.trimmedMethod else {
+            selectedMethod = RouteMethodsStorage.noneOption
+            otherMethodText = ""
+            return
+        }
+
+        if let match = routeMethodsStore.methods.first(where: {
+            $0.compare(method, options: .caseInsensitive) == .orderedSame
+        }) {
+            selectedMethod = match
+            otherMethodText = ""
+        } else {
+            selectedMethod = RouteMethodsStorage.otherOption
+            otherMethodText = method
+        }
+    }
+
+    private func initializeNeighborhoodTypeSelection(from route: RouteRecord) {
+        guard let neighborhoodType = route.trimmedNeighborhoodType else {
+            selectedNeighborhoodType = NeighborhoodTypesStorage.noneOption
+            otherNeighborhoodTypeText = ""
+            return
+        }
+
+        if let match = neighborhoodTypesStore.types.first(where: {
+            $0.compare(neighborhoodType, options: .caseInsensitive) == .orderedSame
+        }) {
+            selectedNeighborhoodType = match
+            otherNeighborhoodTypeText = ""
+        } else {
+            selectedNeighborhoodType = NeighborhoodTypesStorage.otherOption
+            otherNeighborhoodTypeText = neighborhoodType
+        }
+    }
+
+    private func initializeHighlighterColorSelection(from route: RouteRecord) {
+        let state = HighlighterColors.initialPickerState(for: route.trimmedHighlighterColor)
+        selectedHighlighterColor = state.selected
+        otherHighlighterColorText = state.otherText
+    }
+
+    private func saveDraftToActiveRouteIfPossible() {
+        guard !trimmedName.isEmpty,
+              locationManager.isRouteNameAvailable(
+                trimmedName,
+                excludingRouteId: locationManager.activeRouteId
+              ) else {
+            return
+        }
+
+        _ = locationManager.saveActiveRouteDetails(
+            name: trimmedName,
+            method: resolvedMethod,
+            neighborhoodType: resolvedNeighborhoodType,
+            highlighterColor: resolvedHighlighterColor
+        )
     }
 }
 
