@@ -95,10 +95,23 @@ final class LocationManager: NSObject, ObservableObject {
     }
 
     private var hasLocationBackgroundMode: Bool {
-        guard let modes = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] else {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") else {
             return false
         }
-        return modes.contains("location")
+
+        if let modes = value as? [String] {
+            return modes.contains("location")
+        }
+
+        if let modes = value as? NSArray {
+            return modes.contains { ($0 as? String) == "location" }
+        }
+
+        if let mode = value as? String {
+            return mode == "location" || mode.split(separator: " ").contains("location")
+        }
+
+        return false
     }
 
     var isLocationAuthorized: Bool {
