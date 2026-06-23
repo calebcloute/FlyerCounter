@@ -19,7 +19,7 @@ struct CompassTurnaroundFlyerDetector {
     }
 
     mutating func evaluate(
-        travelHeading: Double?,
+        deviceHeading: Double?,
         settings: CompassTurnaroundSettings,
         now: Date = Date()
     ) -> BacktrackEvaluation {
@@ -32,12 +32,12 @@ struct CompassTurnaroundFlyerDetector {
             )
         }
 
-        guard let travelHeading else {
-            return BacktrackEvaluation(result: nil, statusMessage: "Waiting for movement")
+        guard let deviceHeading else {
+            return BacktrackEvaluation(result: nil, statusMessage: "Waiting for compass")
         }
 
         pruneHistory(now: now)
-        headingHistory.append(HeadingSample(date: now, heading: travelHeading))
+        headingHistory.append(HeadingSample(date: now, heading: deviceHeading))
 
         guard let recentDirection = recentDirectionHeading(at: now) else {
             return BacktrackEvaluation(
@@ -46,14 +46,14 @@ struct CompassTurnaroundFlyerDetector {
             )
         }
 
-        let turnaroundDelta = bearingDifference(travelHeading, recentDirection)
+        let turnaroundDelta = bearingDifference(deviceHeading, recentDirection)
 
         guard turnaroundDelta >= settings.turnaroundThresholdDegrees else {
             return BacktrackEvaluation(
                 result: nil,
                 statusMessage:
-                    "Walking · recent \(Int(recentDirection))° · turn Δ\(Int(turnaroundDelta))° " +
-                    "(need \(Int(settings.turnaroundThresholdDegrees))°)"
+                    "Facing \(Int(deviceHeading))° · recent \(Int(recentDirection))° · " +
+                    "turn Δ\(Int(turnaroundDelta))° (need \(Int(settings.turnaroundThresholdDegrees))°)"
             )
         }
 

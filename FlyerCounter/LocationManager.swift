@@ -29,10 +29,12 @@ final class LocationManager: NSObject, ObservableObject {
     private let minimumUpdateDistance: CLLocationDistance = 2
     private let minimumTravelHeadingSpeed: CLLocationSpeed = 0.5
     private let minimumTravelHeadingDistance: CLLocationDistance = 0.5
+    private let maximumHeadingAccuracy: CLLocationDirection = 25
     private var autoFlyerSettings = AutoFlyerSettings()
     private var boundaryAlertSettings = BoundaryAlertSettings()
     private var backtrackFlyerDetector = BacktrackFlyerDetector()
     private var compassTurnaroundFlyerDetector = CompassTurnaroundFlyerDetector()
+    private var currentDeviceHeading: CLLocationDirection?
     private var lastTravelHeadingLocation: CLLocation?
     private var routeSessionTracker = RouteSessionTracker()
 
@@ -171,6 +173,7 @@ final class LocationManager: NSObject, ObservableObject {
 
     func updateAutoFlyerSettings(_ settings: AutoFlyerSettings) {
         autoFlyerSettings = settings
+        refreshHeadingUpdatesIfNeeded()
         if settings.isEnabled {
             AutoFlyerCountFeedback.requestAuthorizationIfNeeded()
         }
@@ -372,6 +375,7 @@ final class LocationManager: NSObject, ObservableObject {
         }
         finalizeRouteAnalytics(routeName: trimmedName)
         startLocationUpdatesIfNeeded()
+        refreshHeadingUpdatesIfNeeded()
         updateStatusMessage()
     }
 
@@ -456,6 +460,7 @@ final class LocationManager: NSObject, ObservableObject {
         viewingRouteId = route.id
         lastRecordedLocation = nil
         lastTravelHeadingLocation = nil
+        currentDeviceHeading = nil
         isTracking = true
         statusMessage = nil
         lastAutoFlyerDetectionMessage = nil
@@ -465,6 +470,7 @@ final class LocationManager: NSObject, ObservableObject {
         routeSessionTracker.reset()
         liveRouteStats = .idle
         startLocationUpdatesIfNeeded()
+        refreshHeadingUpdatesIfNeeded()
         persistArchive()
     }
 
@@ -493,6 +499,7 @@ final class LocationManager: NSObject, ObservableObject {
         }
 
         startLocationUpdatesIfNeeded()
+        refreshHeadingUpdatesIfNeeded()
         persistArchive()
     }
 
@@ -620,6 +627,32 @@ final class LocationManager: NSObject, ObservableObject {
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
+        refreshHeadingUpdatesIfNeeded()
+    }
+
+    private func refreshHeadingUpdatesIfNeeded() {
+        guard isTracking,
+              autoFlyerSettings.isEnabled,
+              autoFlyerSettings.method == .compassTurnaround,
+              CLLocationManager.headingAvailable() else {
+            manager.stopUpdatingHeading()
+            currentDeviceHeading = nil
+            return
+        }
+
+        manager.headingFilter = 5
+        manager.headingOrientation = .portrait
+        manager.startUpdatingHeading()
+    }
+
+    private func updateDeviceHeading(from heading: CLHeading) {
+        guard heading.headingAccuracy >= 0,
+              heading.headingAccuracy <= maximumHeadingAccuracy else {
+            return
+        }
+
+        let resolvedHeading = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+        currentDeviceHeading = resolvedHeading
     }
 
     private func travelHeading(for location: CLLocation) -> Double? {
@@ -715,10 +748,7 @@ final class LocationManager: NSObject, ObservableObject {
         liveRouteStats = .idle
     }
 
-    private func evaluateAutomaticFlyerCounting(
-        for location: CLLocation? = nil,
-        travelHeading: Double? = nil
-    ) {
+    private func evaluateAutomaticFlyerCounting(for location: CLLocation? = nil) {
         guard isTracking,
               isViewingActiveRoute,
               autoFlyerSettings.isEnabled else {
@@ -742,7 +772,7 @@ final class LocationManager: NSObject, ObservableObject {
 
         case .compassTurnaround:
             let evaluation = compassTurnaroundFlyerDetector.evaluate(
-                travelHeading: travelHeading,
+                deviceHeading: currentDeviceHeading,
                 settings: autoFlyerSettings.compassTurnaround
             )
             backtrackDetectionStatus = evaluation.statusMessage
@@ -857,17 +887,20 @@ extension LocationManager: CLLocationManagerDelegate {
         Task { @MainActor in
             currentLocation = location
             if isTracking {
-                if autoFlyerSettings.isEnabled, autoFlyerSettings.method == .compassTurnaround {
-                    evaluateAutomaticFlyerCounting(
-                        for: location,
-                        travelHeading: travelHeading(for: location)
-                    )
-                }
                 recordSessionAnalytics(for: location)
                 lastTravelHeadingLocation = location
                 appendRoutePoint(from: location)
             }
             checkActiveBoundaryProximity(for: location)
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        Task { @MainActor in
+            updateDeviceHeading(from: newHeading)
+            if isTracking, autoFlyerSettings.isEnabled, autoFlyerSettings.method == .compassTurnaround {
+                evaluateAutomaticFlyerCounting()
+            }
         }
     }
 
