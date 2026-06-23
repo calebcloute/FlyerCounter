@@ -151,8 +151,11 @@ struct AutomaticFlyerCountingSection: View {
         } header: {
             Text("Automatic Flyer Counting")
         } footer: {
-            Text("Choose how flyers are counted automatically while a route is recording. Manual +1 and -1 still work.")
-                .foregroundStyle(.secondary)
+            Text(
+                "Choose how flyers are counted automatically while a route is recording. Manual +1 and -1 still work. " +
+                "Each auto count gives one vibration in the app, or a notification on the lock screen."
+            )
+            .foregroundStyle(.secondary)
         }
 
         if store.settings.isEnabled {

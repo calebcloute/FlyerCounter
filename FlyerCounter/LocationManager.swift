@@ -1,6 +1,7 @@
 import Combine
 import CoreLocation
 import Foundation
+import UIKit
 
 @MainActor
 final class LocationManager: NSObject, ObservableObject {
@@ -24,10 +25,12 @@ final class LocationManager: NSObject, ObservableObject {
     private var pendingNewRoute = false
     private var activeBoundaryCoordinates: [CLLocationCoordinate2D]?
     private var isNearActiveBoundary = false
+    private let boundaryAlertManager = BoundaryAlertManager()
     private let minimumUpdateDistance: CLLocationDistance = 2
     private let minimumTravelHeadingSpeed: CLLocationSpeed = 0.5
     private let minimumTravelHeadingDistance: CLLocationDistance = 0.5
     private var autoFlyerSettings = AutoFlyerSettings()
+    private var boundaryAlertSettings = BoundaryAlertSettings()
     private var backtrackFlyerDetector = BacktrackFlyerDetector()
     private var compassTurnaroundFlyerDetector = CompassTurnaroundFlyerDetector()
     private var lastTravelHeadingLocation: CLLocation?
@@ -101,6 +104,8 @@ final class LocationManager: NSObject, ObservableObject {
         manager.pausesLocationUpdatesAutomatically = false
         loadArchive()
         reloadSavedRouteAnalytics()
+        BoundaryNotificationScheduler.prepare()
+        AutoFlyerCountFeedback.prepare()
     }
 
     private func reloadSavedRouteAnalytics() {
@@ -166,15 +171,30 @@ final class LocationManager: NSObject, ObservableObject {
 
     func updateAutoFlyerSettings(_ settings: AutoFlyerSettings) {
         autoFlyerSettings = settings
+        if settings.isEnabled {
+            AutoFlyerCountFeedback.requestAuthorizationIfNeeded()
+        }
+    }
+
+    func updateBoundaryAlertSettings(_ settings: BoundaryAlertSettings) {
+        boundaryAlertSettings = settings
+        boundaryAlertManager.apply(settings: settings)
+        if !settings.isEnabled {
+            isNearActiveBoundary = false
+        }
     }
 
     func setActiveBoundaryOverlay(coordinates: [CLLocationCoordinate2D]?) {
         if let coordinates, coordinates.count >= 2 {
             activeBoundaryCoordinates = coordinates
+            if boundaryAlertSettings.isEnabled, boundaryAlertSettings.vibrateInBackground {
+                BoundaryNotificationScheduler.requestAuthorizationIfNeeded()
+            }
         } else {
             activeBoundaryCoordinates = nil
         }
         isNearActiveBoundary = false
+        boundaryAlertManager.stop()
         startLocationUpdatesIfNeeded()
     }
 
@@ -383,9 +403,10 @@ final class LocationManager: NSObject, ObservableObject {
             route.flyerCount += 1
         }
 
-        if source != .manual {
+        if source.isAutomatic {
             lastAutoFlyerDetectionMessage = note
             lastAutoFlyerDetectionDate = Date()
+            AutoFlyerCountFeedback.deliver(note: note)
         }
     }
 
@@ -738,22 +759,39 @@ final class LocationManager: NSObject, ObservableObject {
     }
 
     private func checkActiveBoundaryProximity(for location: CLLocation) {
-        guard let coordinates = activeBoundaryCoordinates, coordinates.count >= 2 else {
+        guard boundaryAlertSettings.isEnabled else {
             isNearActiveBoundary = false
-            return
-        }
-        guard location.horizontalAccuracy >= 0,
-              location.horizontalAccuracy <= BoundaryProximity.maximumLocationAccuracy else {
+            boundaryAlertManager.stop()
             return
         }
 
-        let distance = BoundaryProximity.nearestDistance(from: location, toClosedPolygon: coordinates)
-        if distance <= BoundaryProximity.alertDistanceMeters {
-            if !isNearActiveBoundary {
-                BoundaryProximity.playNearbyAlert()
-            }
+        guard let coordinates = activeBoundaryCoordinates, coordinates.count >= 2 else {
+            isNearActiveBoundary = false
+            boundaryAlertManager.stop()
+            return
+        }
+        guard location.horizontalAccuracy >= 0,
+              location.horizontalAccuracy <= boundaryAlertSettings.maximumGPSAccuracyMeters else {
+            return
+        }
+
+        let shouldAlert = BoundaryProximity.shouldAlert(
+            location: location,
+            polygon: coordinates,
+            settings: boundaryAlertSettings
+        )
+        let safelyInside = BoundaryProximity.isSafelyInside(
+            location: location,
+            polygon: coordinates,
+            settings: boundaryAlertSettings
+        )
+        let awayFromLine = coordinates.count < 3 && !shouldAlert
+
+        if shouldAlert {
+            boundaryAlertManager.update(shouldAlert: true, settings: boundaryAlertSettings)
             isNearActiveBoundary = true
-        } else if distance > BoundaryProximity.resetDistanceMeters {
+        } else if safelyInside || awayFromLine {
+            boundaryAlertManager.stop()
             isNearActiveBoundary = false
         }
     }

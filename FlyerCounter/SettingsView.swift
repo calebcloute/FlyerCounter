@@ -4,6 +4,7 @@ struct SettingsView: View {
     @EnvironmentObject private var routeMethodsStore: RouteMethodsStore
     @EnvironmentObject private var neighborhoodTypesStore: NeighborhoodTypesStore
     @EnvironmentObject private var autoFlyerSettingsStore: AutoFlyerSettingsStore
+    @EnvironmentObject private var boundaryAlertSettingsStore: BoundaryAlertSettingsStore
     @State private var newMethodName = ""
     @State private var newNeighborhoodTypeName = ""
 
@@ -18,6 +19,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
+                BoundaryAlertSettingsSection(store: boundaryAlertSettingsStore)
                 AutomaticFlyerCountingSection(store: autoFlyerSettingsStore)
 
                 Section {
@@ -90,4 +92,5 @@ struct SettingsView: View {
         .environmentObject(RouteMethodsStore())
         .environmentObject(NeighborhoodTypesStore())
         .environmentObject(AutoFlyerSettingsStore())
+        .environmentObject(BoundaryAlertSettingsStore())
 }

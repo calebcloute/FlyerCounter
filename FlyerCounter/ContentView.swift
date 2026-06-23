@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var neighborhoodTypesStore = NeighborhoodTypesStore()
     @StateObject private var areaBoundariesStore = AreaBoundariesStore()
     @StateObject private var autoFlyerSettingsStore = AutoFlyerSettingsStore()
+    @StateObject private var boundaryAlertSettingsStore = BoundaryAlertSettingsStore()
 
     @AppStorage("selectedTab") private var selectedTab = AppTab.routeTracking.rawValue
     @AppStorage("activeOverlayBoundaryId") private var activeOverlayBoundaryIdRaw = ""
@@ -44,15 +45,20 @@ struct ContentView: View {
         .environmentObject(neighborhoodTypesStore)
         .environmentObject(areaBoundariesStore)
         .environmentObject(autoFlyerSettingsStore)
+        .environmentObject(boundaryAlertSettingsStore)
         .onAppear {
             migrateSelectedTabIfNeeded()
             locationManager.updateAutoFlyerSettings(autoFlyerSettingsStore.settings)
+            locationManager.updateBoundaryAlertSettings(boundaryAlertSettingsStore.settings)
             locationManager.prepareForUse()
             syncActiveBoundaryOverlay()
             showRouteTrackingForPausedNamingIfNeeded()
         }
         .onChange(of: autoFlyerSettingsStore.settings) { _, newSettings in
             locationManager.updateAutoFlyerSettings(newSettings)
+        }
+        .onChange(of: boundaryAlertSettingsStore.settings) { _, newSettings in
+            locationManager.updateBoundaryAlertSettings(newSettings)
         }
         .onChange(of: activeOverlayBoundaryIdRaw) { _, _ in
             syncActiveBoundaryOverlay()
@@ -61,6 +67,7 @@ struct ContentView: View {
             switch newPhase {
             case .active:
                 locationManager.updateAutoFlyerSettings(autoFlyerSettingsStore.settings)
+                locationManager.updateBoundaryAlertSettings(boundaryAlertSettingsStore.settings)
                 locationManager.prepareForUse()
                 syncActiveBoundaryOverlay()
                 showRouteTrackingForPausedNamingIfNeeded()

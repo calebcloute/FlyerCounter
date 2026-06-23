@@ -29,6 +29,9 @@
 		A10000010000000000000015 /* CompassTurnaroundFlyerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000015 /* CompassTurnaroundFlyerDetector.swift */; };
 		A10000010000000000000016 /* RouteSessionAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000016 /* RouteSessionAnalytics.swift */; };
 		A10000010000000000000017 /* TestingStatsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000017 /* TestingStatsView.swift */; };
+		A10000010000000000000018 /* BoundaryAlertManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000018 /* BoundaryAlertManager.swift */; };
+		A10000010000000000000019 /* BoundaryAlertSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000019 /* BoundaryAlertSettings.swift */; };
+		A1000001000000000000001A /* AutoFlyerCountFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000001A /* AutoFlyerCountFeedback.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -54,6 +57,9 @@
 		A10000020000000000000015 /* CompassTurnaroundFlyerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompassTurnaroundFlyerDetector.swift; sourceTree = "<group>"; };
 		A10000020000000000000016 /* RouteSessionAnalytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteSessionAnalytics.swift; sourceTree = "<group>"; };
 		A10000020000000000000017 /* TestingStatsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestingStatsView.swift; sourceTree = "<group>"; };
+		A10000020000000000000018 /* BoundaryAlertManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundaryAlertManager.swift; sourceTree = "<group>"; };
+		A10000020000000000000019 /* BoundaryAlertSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundaryAlertSettings.swift; sourceTree = "<group>"; };
+		A1000002000000000000001A /* AutoFlyerCountFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoFlyerCountFeedback.swift; sourceTree = "<group>"; };
 		A10000030000000000000001 /* FlyerCounter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FlyerCounter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -100,6 +106,9 @@
 				A10000020000000000000015 /* CompassTurnaroundFlyerDetector.swift */,
 				A10000020000000000000016 /* RouteSessionAnalytics.swift */,
 				A10000020000000000000017 /* TestingStatsView.swift */,
+				A10000020000000000000018 /* BoundaryAlertManager.swift */,
+				A10000020000000000000019 /* BoundaryAlertSettings.swift */,
+				A1000002000000000000001A /* AutoFlyerCountFeedback.swift */,
 				A10000020000000000000003 /* Assets.xcassets */,
 			);
 			path = FlyerCounter;
@@ -202,6 +211,9 @@
 				A10000010000000000000015 /* CompassTurnaroundFlyerDetector.swift in Sources */,
 				A10000010000000000000016 /* RouteSessionAnalytics.swift in Sources */,
 				A10000010000000000000017 /* TestingStatsView.swift in Sources */,
+				A10000010000000000000018 /* BoundaryAlertManager.swift in Sources */,
+				A10000010000000000000019 /* BoundaryAlertSettings.swift in Sources */,
+				A1000001000000000000001A /* AutoFlyerCountFeedback.swift in Sources */,
 				A10000010000000000000001 /* FlyerCounterApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -342,6 +354,7 @@
 				INFOPLIST_FILE = FlyerCounter/Info.plist;
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Flyer Counter needs Always location access to keep recording your walking route when the app is in the background, on the lock screen, or while you use other apps.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Flyer Counter uses your location to record your walking route and mark where you place flyers.";
+				INFOPLIST_KEY_NSUserNotificationsUsageDescription = "Flyer Counter sends boundary alerts with vibration when you reach the edge of an area map while the app is in the background.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -374,6 +387,7 @@
 				INFOPLIST_FILE = FlyerCounter/Info.plist;
 				INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription = "Flyer Counter needs Always location access to keep recording your walking route when the app is in the background, on the lock screen, or while you use other apps.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Flyer Counter uses your location to record your walking route and mark where you place flyers.";
+				INFOPLIST_KEY_NSUserNotificationsUsageDescription = "Flyer Counter sends boundary alerts with vibration when you reach the edge of an area map while the app is in the background.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

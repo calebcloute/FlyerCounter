@@ -1,12 +1,48 @@
 import AudioToolbox
 import CoreLocation
 import MapKit
-import UIKit
 
 enum BoundaryProximity {
-    static let alertDistanceMeters: CLLocationDistance = 50
-    static let resetDistanceMeters: CLLocationDistance = 55
-    static let maximumLocationAccuracy: CLLocationAccuracy = 40
+    /// Whether the user is on the boundary edge or outside the area (not merely approaching).
+    static func shouldAlert(
+        location: CLLocation,
+        polygon: [CLLocationCoordinate2D],
+        settings: BoundaryAlertSettings
+    ) -> Bool {
+        guard polygon.count >= 2 else { return false }
+
+        let edgeDistance = nearestDistance(from: location, toClosedPolygon: polygon)
+        let onBoundaryMeters = onBoundaryThreshold(for: location, settings: settings)
+
+        if polygon.count >= 3 {
+            let inside = contains(location.coordinate, in: polygon)
+            if !inside {
+                return true
+            }
+            return edgeDistance <= onBoundaryMeters
+        }
+
+        return edgeDistance <= onBoundaryMeters
+    }
+
+    static func isSafelyInside(
+        location: CLLocation,
+        polygon: [CLLocationCoordinate2D],
+        settings: BoundaryAlertSettings
+    ) -> Bool {
+        guard polygon.count >= 3 else { return false }
+        guard contains(location.coordinate, in: polygon) else { return false }
+
+        let edgeDistance = nearestDistance(from: location, toClosedPolygon: polygon)
+        return edgeDistance > onBoundaryThreshold(for: location, settings: settings)
+    }
+
+    static func playVibrationPulsePair() {
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        }
+    }
 
     static func nearestDistance(
         from location: CLLocation,
@@ -30,17 +66,45 @@ enum BoundaryProximity {
         return minimum
     }
 
-    static func playNearbyAlert() {
-        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+    private static func onBoundaryThreshold(
+        for location: CLLocation,
+        settings: BoundaryAlertSettings
+    ) -> CLLocationDistance {
+        let configured = max(2, settings.edgeThresholdMeters)
+        guard location.horizontalAccuracy >= 0 else { return configured }
 
-        let generator = UINotificationFeedbackGenerator()
-        generator.prepare()
-        generator.notificationOccurred(.warning)
+        let accuracyLimit = max(location.horizontalAccuracy * 0.5, 2)
+        return min(configured, accuracyLimit)
+    }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
-            generator.notificationOccurred(.warning)
+    private static func contains(
+        _ coordinate: CLLocationCoordinate2D,
+        in polygon: [CLLocationCoordinate2D]
+    ) -> Bool {
+        guard polygon.count >= 3 else { return false }
+
+        var inside = false
+        var previousIndex = polygon.count - 1
+
+        for index in polygon.indices {
+            let current = polygon[index]
+            let previous = polygon[previousIndex]
+
+            let latitudeCrossed = (current.latitude > coordinate.latitude)
+                != (previous.latitude > coordinate.latitude)
+            if latitudeCrossed {
+                let longitudeAtLatitude = (previous.longitude - current.longitude)
+                    * (coordinate.latitude - current.latitude)
+                    / (previous.latitude - current.latitude)
+                    + current.longitude
+                if coordinate.longitude < longitudeAtLatitude {
+                    inside.toggle()
+                }
+            }
+            previousIndex = index
         }
+
+        return inside
     }
 
     private static func distance(
