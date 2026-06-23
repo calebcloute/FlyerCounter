@@ -15,6 +15,8 @@ final class LocationManager: NSObject, ObservableObject {
     @Published private(set) var lastAutoFlyerDetectionMessage: String?
     @Published private(set) var lastAutoFlyerDetectionDate: Date?
     @Published private(set) var backtrackDetectionStatus: String?
+    @Published private(set) var liveRouteStats: RouteLiveStats = .idle
+    @Published private(set) var savedRouteAnalytics: [RouteSessionSnapshot] = []
 
     private let manager = CLLocationManager()
     private var lastRecordedLocation: CLLocation?
@@ -23,11 +25,13 @@ final class LocationManager: NSObject, ObservableObject {
     private var activeBoundaryCoordinates: [CLLocationCoordinate2D]?
     private var isNearActiveBoundary = false
     private let minimumUpdateDistance: CLLocationDistance = 2
-    private let maximumHeadingAccuracy: CLLocationDirection = 25
+    private let minimumTravelHeadingSpeed: CLLocationSpeed = 0.5
+    private let minimumTravelHeadingDistance: CLLocationDistance = 0.5
     private var autoFlyerSettings = AutoFlyerSettings()
     private var backtrackFlyerDetector = BacktrackFlyerDetector()
     private var compassTurnaroundFlyerDetector = CompassTurnaroundFlyerDetector()
-    private var currentDeviceHeading: CLLocationDirection?
+    private var lastTravelHeadingLocation: CLLocation?
+    private var routeSessionTracker = RouteSessionTracker()
 
     var displayedRoute: RouteRecord? {
         let id = viewingRouteId ?? activeRouteId
@@ -96,6 +100,11 @@ final class LocationManager: NSObject, ObservableObject {
         manager.activityType = .fitness
         manager.pausesLocationUpdatesAutomatically = false
         loadArchive()
+        reloadSavedRouteAnalytics()
+    }
+
+    private func reloadSavedRouteAnalytics() {
+        savedRouteAnalytics = RouteAnalyticsStorage.loadAll()
     }
 
     private var hasLocationBackgroundMode: Bool {
@@ -157,7 +166,6 @@ final class LocationManager: NSObject, ObservableObject {
 
     func updateAutoFlyerSettings(_ settings: AutoFlyerSettings) {
         autoFlyerSettings = settings
-        refreshHeadingUpdatesIfNeeded()
     }
 
     func setActiveBoundaryOverlay(coordinates: [CLLocationCoordinate2D]?) {
@@ -199,8 +207,18 @@ final class LocationManager: NSObject, ObservableObject {
             viewingRouteId = activeRouteId
         }
 
+        RouteAnalyticsStorage.remove(routeId: id)
+        reloadSavedRouteAnalytics()
         persistArchive()
         updateStatusMessage()
+    }
+
+    func deleteRouteAnalytics(at offsets: IndexSet) {
+        for index in offsets {
+            let snapshot = savedRouteAnalytics[index]
+            RouteAnalyticsStorage.remove(routeId: snapshot.routeId)
+        }
+        reloadSavedRouteAnalytics()
     }
 
     @discardableResult
@@ -320,7 +338,6 @@ final class LocationManager: NSObject, ObservableObject {
         let trimmedHighlighterColor = highlighterColor?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isTracking = false
-        refreshHeadingUpdatesIfNeeded()
         updateActiveRoute { route in
             if let endCoordinate = currentEndCoordinate(for: route) {
                 route.appendEndSegmentMarker(at: endCoordinate)
@@ -333,6 +350,7 @@ final class LocationManager: NSObject, ObservableObject {
             route.neighborhoodType = trimmedNeighborhoodType?.isEmpty == false ? trimmedNeighborhoodType : nil
             route.highlighterColor = trimmedHighlighterColor?.isEmpty == false ? trimmedHighlighterColor : nil
         }
+        finalizeRouteAnalytics(routeName: trimmedName)
         startLocationUpdatesIfNeeded()
         updateStatusMessage()
     }
@@ -416,14 +434,16 @@ final class LocationManager: NSObject, ObservableObject {
         activeRouteId = route.id
         viewingRouteId = route.id
         lastRecordedLocation = nil
+        lastTravelHeadingLocation = nil
         isTracking = true
         statusMessage = nil
         lastAutoFlyerDetectionMessage = nil
         lastAutoFlyerDetectionDate = nil
         backtrackFlyerDetector.reset()
         compassTurnaroundFlyerDetector.reset()
+        routeSessionTracker.reset()
+        liveRouteStats = .idle
         startLocationUpdatesIfNeeded()
-        refreshHeadingUpdatesIfNeeded()
         persistArchive()
     }
 
@@ -431,6 +451,11 @@ final class LocationManager: NSObject, ObservableObject {
         viewingRouteId = activeRouteId
         isTracking = true
         statusMessage = nil
+
+        if !liveRouteStats.isSessionActive {
+            routeSessionTracker.reset(startedAt: activeRoute?.startedAt ?? Date())
+            liveRouteStats = RouteLiveStats(isSessionActive: true)
+        }
 
         updateActiveRoute { route in
             route.endedAt = nil
@@ -447,7 +472,6 @@ final class LocationManager: NSObject, ObservableObject {
         }
 
         startLocationUpdatesIfNeeded()
-        refreshHeadingUpdatesIfNeeded()
         persistArchive()
     }
 
@@ -575,32 +599,21 @@ final class LocationManager: NSObject, ObservableObject {
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
-        refreshHeadingUpdatesIfNeeded()
     }
 
-    private func refreshHeadingUpdatesIfNeeded() {
-        guard isTracking,
-              autoFlyerSettings.isEnabled,
-              autoFlyerSettings.method == .compassTurnaround,
-              CLLocationManager.headingAvailable() else {
-            manager.stopUpdatingHeading()
-            currentDeviceHeading = nil
-            return
+    private func travelHeading(for location: CLLocation) -> Double? {
+        let speed = location.speed >= 0 ? location.speed : 0
+        if speed >= minimumTravelHeadingSpeed, location.course >= 0 {
+            return location.course
         }
 
-        manager.headingFilter = 5
-        manager.headingOrientation = .portrait
-        manager.startUpdatingHeading()
-    }
-
-    private func updateDeviceHeading(from heading: CLHeading) {
-        guard heading.headingAccuracy >= 0,
-              heading.headingAccuracy <= maximumHeadingAccuracy else {
-            return
+        if let previous = lastTravelHeadingLocation {
+            let distance = location.distance(from: previous)
+            guard distance >= minimumTravelHeadingDistance else { return nil }
+            return previous.travelBearing(to: location)
         }
 
-        let resolvedHeading = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
-        currentDeviceHeading = resolvedHeading
+        return nil
     }
 
     private func configureBackgroundLocationIfNeeded() {
@@ -655,10 +668,36 @@ final class LocationManager: NSObject, ObservableObject {
             }
         }
         lastRecordedLocation = location
-        evaluateAutomaticFlyerCounting(for: location)
+        if autoFlyerSettings.isEnabled, autoFlyerSettings.method == .backtrackOverlap {
+            evaluateAutomaticFlyerCounting(for: location)
+        }
     }
 
-    private func evaluateAutomaticFlyerCounting(for location: CLLocation? = nil) {
+    private func recordSessionAnalytics(for location: CLLocation) {
+        guard isTracking else { return }
+        let heading = travelHeading(for: location)
+        liveRouteStats = routeSessionTracker.process(
+            location: location,
+            travelHeading: heading
+        )
+    }
+
+    private func finalizeRouteAnalytics(routeName: String?) {
+        guard let activeRouteId else { return }
+        guard let snapshot = routeSessionTracker.finalize(
+            routeId: activeRouteId,
+            routeName: routeName
+        ) else { return }
+
+        RouteAnalyticsStorage.upsert(snapshot)
+        reloadSavedRouteAnalytics()
+        liveRouteStats = .idle
+    }
+
+    private func evaluateAutomaticFlyerCounting(
+        for location: CLLocation? = nil,
+        travelHeading: Double? = nil
+    ) {
         guard isTracking,
               isViewingActiveRoute,
               autoFlyerSettings.isEnabled else {
@@ -682,7 +721,7 @@ final class LocationManager: NSObject, ObservableObject {
 
         case .compassTurnaround:
             let evaluation = compassTurnaroundFlyerDetector.evaluate(
-                deviceHeading: currentDeviceHeading,
+                travelHeading: travelHeading,
                 settings: autoFlyerSettings.compassTurnaround
             )
             backtrackDetectionStatus = evaluation.statusMessage
@@ -780,18 +819,17 @@ extension LocationManager: CLLocationManagerDelegate {
         Task { @MainActor in
             currentLocation = location
             if isTracking {
+                if autoFlyerSettings.isEnabled, autoFlyerSettings.method == .compassTurnaround {
+                    evaluateAutomaticFlyerCounting(
+                        for: location,
+                        travelHeading: travelHeading(for: location)
+                    )
+                }
+                recordSessionAnalytics(for: location)
+                lastTravelHeadingLocation = location
                 appendRoutePoint(from: location)
             }
             checkActiveBoundaryProximity(for: location)
-        }
-    }
-
-    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
-        Task { @MainActor in
-            updateDeviceHeading(from: newHeading)
-            if isTracking, autoFlyerSettings.isEnabled, autoFlyerSettings.method == .compassTurnaround {
-                evaluateAutomaticFlyerCounting()
-            }
         }
     }
 
@@ -813,5 +851,18 @@ extension LocationManager: CLLocationManagerDelegate {
                 statusMessage = "Unable to get your location. Try moving outdoors and try again."
             }
         }
+    }
+}
+
+private extension CLLocation {
+    func travelBearing(to destination: CLLocation) -> Double {
+        let lat1 = coordinate.latitude * .pi / 180
+        let lat2 = destination.coordinate.latitude * .pi / 180
+        let deltaLon = (destination.coordinate.longitude - coordinate.longitude) * .pi / 180
+
+        let y = sin(deltaLon) * cos(lat2)
+        let x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon)
+        let bearing = atan2(y, x) * 180 / .pi
+        return (bearing + 360).truncatingRemainder(dividingBy: 360)
     }
 }

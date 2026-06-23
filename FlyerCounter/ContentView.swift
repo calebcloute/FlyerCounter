@@ -2,7 +2,8 @@ import SwiftUI
 
 private enum AppTab: Int {
     case routeTracking = 0
-    case settings = 1
+    case testingStats = 1
+    case settings = 2
 }
 
 struct ContentView: View {
@@ -14,6 +15,7 @@ struct ContentView: View {
 
     @AppStorage("selectedTab") private var selectedTab = AppTab.routeTracking.rawValue
     @AppStorage("activeOverlayBoundaryId") private var activeOverlayBoundaryIdRaw = ""
+    @AppStorage("didMigrateTestingTab") private var didMigrateTestingTab = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -25,6 +27,12 @@ struct ContentView: View {
                 Label("Route Tracking", systemImage: "map")
             }
             .tag(AppTab.routeTracking.rawValue)
+
+            TestingStatsView(locationManager: locationManager)
+                .tabItem {
+                    Label("Testing", systemImage: "chart.xyaxis.line")
+                }
+                .tag(AppTab.testingStats.rawValue)
 
             SettingsView()
                 .tabItem {
@@ -65,14 +73,11 @@ struct ContentView: View {
     }
 
     private func migrateSelectedTabIfNeeded() {
-        switch selectedTab {
-        case 1:
-            selectedTab = AppTab.routeTracking.rawValue
-        case 2:
+        guard !didMigrateTestingTab else { return }
+        if selectedTab == 1 {
             selectedTab = AppTab.settings.rawValue
-        default:
-            break
         }
+        didMigrateTestingTab = true
     }
 
     private func syncActiveBoundaryOverlay() {

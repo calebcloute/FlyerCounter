@@ -13,7 +13,7 @@ enum AutoFlyerCountingMethod: String, Codable, CaseIterable, Identifiable {
         case .backtrackOverlap:
             "Backtrack overlap"
         case .compassTurnaround:
-            "Compass turnaround"
+            "Turnaround"
         }
     }
 
@@ -22,7 +22,7 @@ enum AutoFlyerCountingMethod: String, Codable, CaseIterable, Identifiable {
         case .backtrackOverlap:
             "Watching for backtrack overlap while you walk."
         case .compassTurnaround:
-            "Watching for sharp turnarounds from your recent direction."
+            "Watching for sharp turnarounds while you walk."
         }
     }
 }
@@ -122,13 +122,12 @@ struct CompassTurnaroundSettingsSection: View {
                 Slider(value: $settings.cooldownSeconds, in: 3...30, step: 1)
             }
         } header: {
-            Text("Compass Turnaround")
+            Text("Turnaround")
         } footer: {
             Text(
-                "Counts a flyer when you turn around sharply compared to where you were heading " +
-                "a few seconds ago — not from when the route started. A 90° turn onto a driveway won't " +
-                "count; turning back around at the house will. Hold the phone upright in portrait with " +
-                "the top facing the direction you walk."
+                "Counts a flyer when you turn around sharply compared to where you were walking " +
+                "a few seconds ago. Uses GPS movement direction, so it works with your phone in your " +
+                "pocket. A turn onto a driveway won't count; turning back at the house will."
             )
             .foregroundStyle(.secondary)
         }

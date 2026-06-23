@@ -479,7 +479,7 @@ struct RouteTrackingView: View {
             VStack(spacing: 4) {
                 Label(
                     "Auto counting: \(method.label)",
-                    systemImage: method == .compassTurnaround ? "location.north.circle" : "point.topleft.down.to.point.bottomright.filled.curvepath"
+                    systemImage: method == .compassTurnaround ? "arrow.uturn.down" : "point.topleft.down.to.point.bottomright.filled.curvepath"
                 )
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(method == .compassTurnaround ? .blue : .green)
