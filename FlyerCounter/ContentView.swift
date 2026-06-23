@@ -2,7 +2,7 @@ import SwiftUI
 
 private enum AppTab: Int {
     case routeTracking = 0
-    case preferences = 1
+    case settings = 1
 }
 
 struct ContentView: View {
@@ -10,6 +10,7 @@ struct ContentView: View {
     @StateObject private var routeMethodsStore = RouteMethodsStore()
     @StateObject private var neighborhoodTypesStore = NeighborhoodTypesStore()
     @StateObject private var areaBoundariesStore = AreaBoundariesStore()
+    @StateObject private var autoFlyerSettingsStore = AutoFlyerSettingsStore()
 
     @AppStorage("selectedTab") private var selectedTab = AppTab.routeTracking.rawValue
     @AppStorage("activeOverlayBoundaryId") private var activeOverlayBoundaryIdRaw = ""
@@ -25,26 +26,32 @@ struct ContentView: View {
             }
             .tag(AppTab.routeTracking.rawValue)
 
-            PreferencesView()
+            SettingsView()
                 .tabItem {
-                    Label("Preferences", systemImage: "gearshape")
+                    Label("Settings", systemImage: "gearshape")
                 }
-                .tag(AppTab.preferences.rawValue)
+                .tag(AppTab.settings.rawValue)
         }
         .environmentObject(routeMethodsStore)
         .environmentObject(neighborhoodTypesStore)
         .environmentObject(areaBoundariesStore)
+        .environmentObject(autoFlyerSettingsStore)
         .onAppear {
             migrateSelectedTabIfNeeded()
+            locationManager.updateAutoFlyerSettings(autoFlyerSettingsStore.settings)
             locationManager.prepareForUse()
             syncActiveBoundaryOverlay()
             showRouteTrackingForPausedNamingIfNeeded()
+        }
+        .onChange(of: autoFlyerSettingsStore.settings) { _, newSettings in
+            locationManager.updateAutoFlyerSettings(newSettings)
         }
         .onChange(of: activeOverlayBoundaryIdRaw) { _, _ in
             syncActiveBoundaryOverlay()
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
+                locationManager.updateAutoFlyerSettings(autoFlyerSettingsStore.settings)
                 locationManager.prepareForUse()
                 syncActiveBoundaryOverlay()
                 showRouteTrackingForPausedNamingIfNeeded()
@@ -57,7 +64,7 @@ struct ContentView: View {
         case 1:
             selectedTab = AppTab.routeTracking.rawValue
         case 2:
-            selectedTab = AppTab.preferences.rawValue
+            selectedTab = AppTab.settings.rawValue
         default:
             break
         }

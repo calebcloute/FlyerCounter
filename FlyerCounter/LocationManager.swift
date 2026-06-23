@@ -12,6 +12,8 @@ final class LocationManager: NSObject, ObservableObject {
     @Published private(set) var isTracking = false
     @Published private(set) var statusMessage: String?
     @Published private(set) var needsPausedRouteNaming = false
+    @Published private(set) var lastAutoFlyerDetectionMessage: String?
+    @Published private(set) var lastAutoFlyerDetectionDate: Date?
 
     private let manager = CLLocationManager()
     private var lastRecordedLocation: CLLocation?
@@ -20,6 +22,8 @@ final class LocationManager: NSObject, ObservableObject {
     private var activeBoundaryCoordinates: [CLLocationCoordinate2D]?
     private var isNearActiveBoundary = false
     private let minimumUpdateDistance: CLLocationDistance = 2
+    private var autoFlyerSettings = AutoFlyerSettings()
+    private var backtrackFlyerDetector = BacktrackFlyerDetector()
 
     var displayedRoute: RouteRecord? {
         let id = viewingRouteId ?? activeRouteId
@@ -125,6 +129,10 @@ final class LocationManager: NSObject, ObservableObject {
         if isLocationAuthorized {
             startLocationUpdatesIfNeeded()
         }
+    }
+
+    func updateAutoFlyerSettings(_ settings: AutoFlyerSettings) {
+        autoFlyerSettings = settings
     }
 
     func setActiveBoundaryOverlay(coordinates: [CLLocationCoordinate2D]?) {
@@ -316,15 +324,24 @@ final class LocationManager: NSObject, ObservableObject {
 
     func recordFlyerDrop() {
         guard let location = currentLocation else { return }
+        recordFlyerDrop(at: location, source: .manual)
+    }
 
+    private func recordFlyerDrop(at location: CLLocation, source: FlyerDropSource, note: String? = nil) {
         updateActiveRoute { route in
             route.flyerDrops.append(
                 FlyerDrop(
                     latitude: location.coordinate.latitude,
-                    longitude: location.coordinate.longitude
+                    longitude: location.coordinate.longitude,
+                    source: source
                 )
             )
             route.flyerCount += 1
+        }
+
+        if source != .manual {
+            lastAutoFlyerDetectionMessage = note
+            lastAutoFlyerDetectionDate = Date()
         }
     }
 
@@ -375,6 +392,9 @@ final class LocationManager: NSObject, ObservableObject {
         lastRecordedLocation = nil
         isTracking = true
         statusMessage = nil
+        lastAutoFlyerDetectionMessage = nil
+        lastAutoFlyerDetectionDate = nil
+        backtrackFlyerDetector.reset()
         startLocationUpdatesIfNeeded()
         persistArchive()
     }
@@ -558,6 +578,25 @@ final class LocationManager: NSObject, ObservableObject {
             }
         }
         lastRecordedLocation = location
+        evaluateAutomaticFlyerCounting(for: location)
+    }
+
+    private func evaluateAutomaticFlyerCounting(for location: CLLocation) {
+        guard isTracking,
+              isViewingActiveRoute,
+              autoFlyerSettings.isEnabled,
+              let route = activeRoute else {
+            return
+        }
+
+        guard let result = backtrackFlyerDetector.evaluate(
+            routePoints: route.routePoints,
+            settings: autoFlyerSettings.backtrack
+        ) else {
+            return
+        }
+
+        recordFlyerDrop(at: location, source: .autoBacktrack, note: result.note)
     }
 
     private func currentEndCoordinate(for route: RouteRecord) -> CLLocationCoordinate2D? {

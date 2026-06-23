@@ -84,7 +84,7 @@ struct RouteMethodPickerSection: View {
                     .textInputAutocapitalization(.words)
             }
         } footer: {
-            Text("Optional. Add reusable methods in Preferences, or choose Other.")
+            Text("Optional. Add reusable methods in Settings, or choose Other.")
                 .foregroundStyle(.secondary)
         }
     }

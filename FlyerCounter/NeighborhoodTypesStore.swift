@@ -80,7 +80,7 @@ struct NeighborhoodTypePickerSection: View {
                     .textInputAutocapitalization(.words)
             }
         } footer: {
-            Text("Optional. Add reusable types in Preferences, or choose Other.")
+            Text("Optional. Add reusable types in Settings, or choose Other.")
                 .foregroundStyle(.secondary)
         }
     }

@@ -1,8 +1,9 @@
 import SwiftUI
 
-struct PreferencesView: View {
+struct SettingsView: View {
     @EnvironmentObject private var routeMethodsStore: RouteMethodsStore
     @EnvironmentObject private var neighborhoodTypesStore: NeighborhoodTypesStore
+    @EnvironmentObject private var autoFlyerSettingsStore: AutoFlyerSettingsStore
     @State private var newMethodName = ""
     @State private var newNeighborhoodTypeName = ""
 
@@ -17,6 +18,8 @@ struct PreferencesView: View {
     var body: some View {
         NavigationStack {
             List {
+                AutomaticFlyerCountingSection(store: autoFlyerSettingsStore)
+
                 Section {
                     if routeMethodsStore.methods.isEmpty {
                         Text("No route methods yet. Add one below to use when ending a route.")
@@ -77,13 +80,14 @@ struct PreferencesView: View {
                     }
                 }
             }
-            .navigationTitle("Preferences")
+            .navigationTitle("Settings")
         }
     }
 }
 
 #Preview {
-    PreferencesView()
+    SettingsView()
         .environmentObject(RouteMethodsStore())
         .environmentObject(NeighborhoodTypesStore())
+        .environmentObject(AutoFlyerSettingsStore())
 }

@@ -5,6 +5,7 @@ import SwiftUI
 struct RouteTrackingView: View {
     @ObservedObject var locationManager: LocationManager
     @EnvironmentObject private var areaBoundariesStore: AreaBoundariesStore
+    @EnvironmentObject private var autoFlyerSettingsStore: AutoFlyerSettingsStore
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var showEndRouteNaming = false
     @State private var showPausedRouteNaming = false
@@ -234,7 +235,7 @@ struct RouteTrackingView: View {
             ForEach(locationManager.flyerDrops) { drop in
                 Annotation("", coordinate: drop.coordinate, anchor: .center) {
                     Circle()
-                        .fill(.orange)
+                        .fill(drop.resolvedSource == .autoBacktrack ? .green : .orange)
                         .frame(width: 12, height: 12)
                         .overlay(Circle().stroke(.white, lineWidth: 2))
                 }
@@ -383,6 +384,8 @@ struct RouteTrackingView: View {
             }
 
             if locationManager.isTracking && locationManager.isViewingActiveRoute {
+                autoFlyerCountingStatus
+
                 statsRow
 
                 Button {
@@ -467,6 +470,39 @@ struct RouteTrackingView: View {
             }
         }
         .padding()
+    }
+
+    @ViewBuilder
+    private var autoFlyerCountingStatus: some View {
+        if autoFlyerSettingsStore.settings.isEnabled {
+            VStack(spacing: 4) {
+                Label("Auto counting: Backtrack overlap", systemImage: "point.topleft.down.to.point.bottomright.filled.curvepath")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.green)
+
+                if let message = locationManager.lastAutoFlyerDetectionMessage,
+                   let date = locationManager.lastAutoFlyerDetectionDate {
+                    Text("Last auto count · \(message) · \(autoCountRelativeDate(date))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else {
+                    Text("Watching for backtrack overlap while you walk.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func autoCountRelativeDate(_ date: Date) -> String {
+        let interval = max(0, Int(Date().timeIntervalSince(date)))
+        if interval < 60 {
+            return "\(interval)s ago"
+        }
+        return "\(interval / 60)m ago"
     }
 
     private func routeTimestampLabel(for route: RouteRecord) -> some View {
@@ -847,5 +883,6 @@ private struct EndRouteNamingSheet: View {
             .environmentObject(RouteMethodsStore())
             .environmentObject(NeighborhoodTypesStore())
             .environmentObject(AreaBoundariesStore())
+            .environmentObject(AutoFlyerSettingsStore())
     }
 }
