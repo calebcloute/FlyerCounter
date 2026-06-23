@@ -11,7 +11,6 @@ struct BacktrackFlyerDetector {
     private var outboundBearing: Double?
     private var outboundSamples = 0
     private var isReturning = false
-    private var returningDistance: CLLocationDistance = 0
     private var overlapDistance: CLLocationDistance = 0
     private var lastCountedOverlapAnchorIndex: Int?
 
@@ -24,7 +23,6 @@ struct BacktrackFlyerDetector {
         outboundBearing = nil
         outboundSamples = 0
         isReturning = false
-        returningDistance = 0
         overlapDistance = 0
         lastCountedOverlapAnchorIndex = nil
     }
@@ -60,7 +58,6 @@ struct BacktrackFlyerDetector {
                outboundSamples >= minimumOutboundSamples,
                bearingDifference(currentBearing, outboundBearing) >= oppositeBearingThreshold {
                 isReturning = true
-                returningDistance = stepDistance
                 overlapDistance = overlapForCurrentPoint(
                     locations: locations,
                     currentIndex: currentIndex,
@@ -70,8 +67,6 @@ struct BacktrackFlyerDetector {
             return nil
         }
 
-        returningDistance += stepDistance
-
         if overlapForCurrentPoint(
             locations: locations,
             currentIndex: currentIndex,
@@ -80,8 +75,7 @@ struct BacktrackFlyerDetector {
             overlapDistance += stepDistance
         }
 
-        guard returningDistance >= settings.minimumReverseDistanceMeters,
-              overlapDistance >= settings.minimumOverlapMeters else {
+        guard overlapDistance >= settings.minimumOverlapMeters else {
             return nil
         }
 
@@ -117,7 +111,6 @@ struct BacktrackFlyerDetector {
 
     private mutating func resetReturningState() {
         isReturning = false
-        returningDistance = 0
         overlapDistance = 0
     }
 

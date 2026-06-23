@@ -4,7 +4,6 @@ import SwiftUI
 
 struct BacktrackDetectionSettings: Codable, Equatable {
     var pathMatchToleranceMeters: Double = 12
-    var minimumReverseDistanceMeters: Double = 15
     var minimumOverlapMeters: Double = 8
     var cooldownSeconds: Double = 8
 }
@@ -55,11 +54,6 @@ struct BacktrackDetectionSettingsSection: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Minimum reverse distance: \(Int(settings.minimumReverseDistanceMeters)) m")
-                Slider(value: $settings.minimumReverseDistanceMeters, in: 5...40, step: 1)
-            }
-
-            VStack(alignment: .leading, spacing: 8) {
                 Text("Minimum overlap: \(Int(settings.minimumOverlapMeters)) m")
                 Slider(value: $settings.minimumOverlapMeters, in: 3...25, step: 1)
             }
@@ -74,8 +68,7 @@ struct BacktrackDetectionSettingsSection: View {
             Text(
                 "Counts a flyer when you walk back over your outbound path in the opposite direction. " +
                 "Path match tolerance is how close the return path must be to the original. " +
-                "Minimum reverse distance is how far you must walk back before a count can happen. " +
-                "Minimum overlap is how much shared path is required."
+                "Minimum overlap is how much shared path is required before counting."
             )
             .foregroundStyle(.secondary)
         }
