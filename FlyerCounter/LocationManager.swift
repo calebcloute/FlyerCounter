@@ -23,8 +23,10 @@ final class LocationManager: NSObject, ObservableObject {
     private var activeBoundaryCoordinates: [CLLocationCoordinate2D]?
     private var isNearActiveBoundary = false
     private let minimumUpdateDistance: CLLocationDistance = 2
+    private let maximumHeadingAccuracy: CLLocationDirection = 25
     private var autoFlyerSettings = AutoFlyerSettings()
     private var backtrackFlyerDetector = BacktrackFlyerDetector()
+    private var currentDeviceHeading: CLLocationDirection?
 
     var displayedRoute: RouteRecord? {
         let id = viewingRouteId ?? activeRouteId
@@ -154,6 +156,7 @@ final class LocationManager: NSObject, ObservableObject {
 
     func updateAutoFlyerSettings(_ settings: AutoFlyerSettings) {
         autoFlyerSettings = settings
+        refreshHeadingUpdatesIfNeeded()
     }
 
     func setActiveBoundaryOverlay(coordinates: [CLLocationCoordinate2D]?) {
@@ -316,6 +319,7 @@ final class LocationManager: NSObject, ObservableObject {
         let trimmedHighlighterColor = highlighterColor?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isTracking = false
+        refreshHeadingUpdatesIfNeeded()
         updateActiveRoute { route in
             if let endCoordinate = currentEndCoordinate(for: route) {
                 route.appendEndSegmentMarker(at: endCoordinate)
@@ -417,6 +421,7 @@ final class LocationManager: NSObject, ObservableObject {
         lastAutoFlyerDetectionDate = nil
         backtrackFlyerDetector.reset()
         startLocationUpdatesIfNeeded()
+        refreshHeadingUpdatesIfNeeded()
         persistArchive()
     }
 
@@ -440,6 +445,7 @@ final class LocationManager: NSObject, ObservableObject {
         }
 
         startLocationUpdatesIfNeeded()
+        refreshHeadingUpdatesIfNeeded()
         persistArchive()
     }
 
@@ -567,6 +573,32 @@ final class LocationManager: NSObject, ObservableObject {
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         manager.showsBackgroundLocationIndicator = false
+        refreshHeadingUpdatesIfNeeded()
+    }
+
+    private func refreshHeadingUpdatesIfNeeded() {
+        guard isTracking, autoFlyerSettings.isEnabled, CLLocationManager.headingAvailable() else {
+            manager.stopUpdatingHeading()
+            currentDeviceHeading = nil
+            if !isTracking || !autoFlyerSettings.isEnabled {
+                backtrackDetectionStatus = nil
+            }
+            return
+        }
+
+        manager.headingFilter = 5
+        manager.headingOrientation = .portrait
+        manager.startUpdatingHeading()
+    }
+
+    private func updateDeviceHeading(from heading: CLHeading) {
+        guard heading.headingAccuracy >= 0,
+              heading.headingAccuracy <= maximumHeadingAccuracy else {
+            return
+        }
+
+        let resolvedHeading = heading.trueHeading >= 0 ? heading.trueHeading : heading.magneticHeading
+        currentDeviceHeading = resolvedHeading
     }
 
     private func configureBackgroundLocationIfNeeded() {
@@ -621,10 +653,10 @@ final class LocationManager: NSObject, ObservableObject {
             }
         }
         lastRecordedLocation = location
-        evaluateAutomaticFlyerCounting(for: location)
+        evaluateAutomaticFlyerCounting(at: location, shouldAccumulateOverlap: true)
     }
 
-    private func evaluateAutomaticFlyerCounting(for location: CLLocation) {
+    private func evaluateAutomaticFlyerCounting(at location: CLLocation? = nil, shouldAccumulateOverlap: Bool = false) {
         guard isTracking,
               isViewingActiveRoute,
               autoFlyerSettings.isEnabled,
@@ -635,13 +667,16 @@ final class LocationManager: NSObject, ObservableObject {
 
         let evaluation = backtrackFlyerDetector.evaluate(
             routePoints: route.routePoints,
-            settings: autoFlyerSettings.backtrack
+            deviceHeading: currentDeviceHeading,
+            settings: autoFlyerSettings.backtrack,
+            shouldAccumulateOverlap: shouldAccumulateOverlap
         )
         backtrackDetectionStatus = evaluation.statusMessage
 
         guard let result = evaluation.result else { return }
+        guard let dropLocation = location ?? currentLocation else { return }
 
-        recordFlyerDrop(at: location, source: .autoBacktrack, note: result.note)
+        recordFlyerDrop(at: dropLocation, source: .autoBacktrack, note: result.note)
     }
 
     private func currentEndCoordinate(for route: RouteRecord) -> CLLocationCoordinate2D? {
@@ -733,6 +768,15 @@ extension LocationManager: CLLocationManagerDelegate {
                 appendRoutePoint(from: location)
             }
             checkActiveBoundaryProximity(for: location)
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
+        Task { @MainActor in
+            updateDeviceHeading(from: newHeading)
+            if isTracking, autoFlyerSettings.isEnabled {
+                evaluateAutomaticFlyerCounting()
+            }
         }
     }
 

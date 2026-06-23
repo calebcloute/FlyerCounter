@@ -66,7 +66,8 @@ struct BacktrackDetectionSettingsSection: View {
             Text("Backtrack Overlap")
         } footer: {
             Text(
-                "Counts a flyer when you walk back over your outbound path in the opposite direction. " +
+                "Turn detection uses your phone's compass while recording. Hold the phone upright in portrait " +
+                "with the top facing the direction you walk. GPS is only used to check path overlap. " +
                 "Path match tolerance is how close the return path must be to the original. " +
                 "Minimum overlap is how much shared path is required before counting."
             )
