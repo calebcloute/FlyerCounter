@@ -4,6 +4,7 @@ import Foundation
 enum FlyerDropSource: String, Codable {
     case manual
     case autoBacktrack
+    case autoCompassTurnaround
 }
 
 struct FlyerDrop: Identifiable, Codable {

@@ -235,7 +235,7 @@ struct RouteTrackingView: View {
             ForEach(locationManager.flyerDrops) { drop in
                 Annotation("", coordinate: drop.coordinate, anchor: .center) {
                     Circle()
-                        .fill(drop.resolvedSource == .autoBacktrack ? .green : .orange)
+                        .fill(flyerDropColor(for: drop.resolvedSource))
                         .frame(width: 12, height: 12)
                         .overlay(Circle().stroke(.white, lineWidth: 2))
                 }
@@ -475,12 +475,16 @@ struct RouteTrackingView: View {
     @ViewBuilder
     private var autoFlyerCountingStatus: some View {
         if autoFlyerSettingsStore.settings.isEnabled {
+            let method = autoFlyerSettingsStore.settings.method
             VStack(spacing: 4) {
-                Label("Auto counting: Backtrack overlap", systemImage: "point.topleft.down.to.point.bottomright.filled.curvepath")
+                Label(
+                    "Auto counting: \(method.label)",
+                    systemImage: method == .compassTurnaround ? "location.north.circle" : "point.topleft.down.to.point.bottomright.filled.curvepath"
+                )
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(method == .compassTurnaround ? .blue : .green)
 
-                Text(locationManager.backtrackDetectionStatus ?? "Watching for backtrack overlap while you walk.")
+                Text(locationManager.backtrackDetectionStatus ?? method.statusDescription)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -494,6 +498,17 @@ struct RouteTrackingView: View {
                 }
             }
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    private func flyerDropColor(for source: FlyerDropSource) -> Color {
+        switch source {
+        case .manual:
+            .orange
+        case .autoBacktrack:
+            .green
+        case .autoCompassTurnaround:
+            .blue
         }
     }
 

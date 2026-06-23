@@ -26,6 +26,7 @@
 		A10000010000000000000012 /* BoundaryProximity.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000012 /* BoundaryProximity.swift */; };
 		A10000010000000000000013 /* AutoFlyerSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000013 /* AutoFlyerSettings.swift */; };
 		A10000010000000000000014 /* BacktrackFlyerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000014 /* BacktrackFlyerDetector.swift */; };
+		A10000010000000000000015 /* CompassTurnaroundFlyerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000015 /* CompassTurnaroundFlyerDetector.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -48,6 +49,7 @@
 		A10000020000000000000012 /* BoundaryProximity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundaryProximity.swift; sourceTree = "<group>"; };
 		A10000020000000000000013 /* AutoFlyerSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoFlyerSettings.swift; sourceTree = "<group>"; };
 		A10000020000000000000014 /* BacktrackFlyerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BacktrackFlyerDetector.swift; sourceTree = "<group>"; };
+		A10000020000000000000015 /* CompassTurnaroundFlyerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompassTurnaroundFlyerDetector.swift; sourceTree = "<group>"; };
 		A10000030000000000000001 /* FlyerCounter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FlyerCounter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -91,6 +93,7 @@
 				A10000020000000000000012 /* BoundaryProximity.swift */,
 				A10000020000000000000013 /* AutoFlyerSettings.swift */,
 				A10000020000000000000014 /* BacktrackFlyerDetector.swift */,
+				A10000020000000000000015 /* CompassTurnaroundFlyerDetector.swift */,
 				A10000020000000000000003 /* Assets.xcassets */,
 			);
 			path = FlyerCounter;
@@ -190,6 +193,7 @@
 				A10000010000000000000012 /* BoundaryProximity.swift in Sources */,
 				A10000010000000000000013 /* AutoFlyerSettings.swift in Sources */,
 				A10000010000000000000014 /* BacktrackFlyerDetector.swift in Sources */,
+				A10000010000000000000015 /* CompassTurnaroundFlyerDetector.swift in Sources */,
 				A10000010000000000000001 /* FlyerCounterApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
