@@ -16,6 +16,7 @@ struct BacktrackFlyerDetector {
     private var lastAutoCountDate: Date?
     private var outboundBearing: Double?
     private var outboundSamples = 0
+    private var legStartIndex = 0
     private var isReturning = false
     private var overlapDistance: CLLocationDistance = 0
     private var lastCountedOverlapAnchorIndex: Int?
@@ -29,6 +30,7 @@ struct BacktrackFlyerDetector {
         lastAutoCountDate = nil
         outboundBearing = nil
         outboundSamples = 0
+        legStartIndex = 0
         isReturning = false
         overlapDistance = 0
         lastCountedOverlapAnchorIndex = nil
@@ -70,16 +72,31 @@ struct BacktrackFlyerDetector {
         let currentBearing = previous.bearing(to: current)
 
         if !isReturning {
-            trackOutboundBearing(currentBearing)
+            if outboundSamples < minimumOutboundSamples {
+                trackOutboundBearing(currentBearing)
+                return BacktrackEvaluation(
+                    result: nil,
+                    statusMessage: "Learning outbound · \(outboundSamples)/\(minimumOutboundSamples)"
+                )
+            }
 
-            if let outboundBearing,
-               outboundSamples >= minimumOutboundSamples,
-               let recentBearing = movementBearing(
-                   locations: locations,
-                   endIndex: currentIndex,
-                   lookback: movementBearingLookback
-               ),
-               bearingDifference(recentBearing, outboundBearing) >= oppositeBearingThreshold {
+            guard let referenceBearing = outboundReferenceBearing(
+                locations: locations,
+                currentIndex: currentIndex
+            ) else {
+                return BacktrackEvaluation(result: nil, statusMessage: "Learning outbound path")
+            }
+
+            let recentBearing = movementBearing(
+                locations: locations,
+                endIndex: currentIndex,
+                lookback: movementBearingLookback
+            )
+            let stepDelta = bearingDifference(currentBearing, referenceBearing)
+            let recentDelta = recentBearing.map { bearingDifference($0, referenceBearing) } ?? 0
+            let turnaroundDelta = max(stepDelta, recentDelta)
+
+            if turnaroundDelta >= oppositeBearingThreshold {
                 isReturning = true
                 if isOverlappingOutboundPath(
                     locations: locations,
@@ -89,10 +106,11 @@ struct BacktrackFlyerDetector {
                     overlapDistance = stepDistance
                 }
             } else {
-                let bearingText = outboundBearing.map { "\(Int($0))°" } ?? "—"
                 return BacktrackEvaluation(
                     result: nil,
-                    statusMessage: "Outbound · heading \(bearingText)"
+                    statusMessage:
+                        "Outbound · \(Int(referenceBearing))° · turn Δ\(Int(turnaroundDelta))° " +
+                        "(need \(Int(oppositeBearingThreshold))°)"
                 )
             }
         }
@@ -128,6 +146,7 @@ struct BacktrackFlyerDetector {
         let countedOverlap = overlapDistance
         lastAutoCountDate = now
         lastCountedOverlapAnchorIndex = anchorIndex
+        legStartIndex = currentIndex
         resetLegState()
 
         return BacktrackEvaluation(
@@ -156,6 +175,20 @@ struct BacktrackFlyerDetector {
         outboundSamples = 0
     }
 
+    private func outboundReferenceBearing(
+        locations: [CLLocation],
+        currentIndex: Int
+    ) -> Double? {
+        guard currentIndex > legStartIndex else { return outboundBearing }
+
+        let tailIndex = max(legStartIndex + 1, currentIndex - recentPointSkipCount - 3)
+        let from = locations[legStartIndex]
+        let to = locations[min(tailIndex, currentIndex - 1)]
+        guard from.distance(from: to) >= 3 else { return outboundBearing }
+
+        return from.bearing(to: to)
+    }
+
     private func isOverlappingOutboundPath(
         locations: [CLLocation],
         currentIndex: Int,
@@ -174,14 +207,14 @@ struct BacktrackFlyerDetector {
         tolerance: CLLocationDistance
     ) -> Int? {
         let current = locations[currentIndex]
-        let searchEnd = max(0, currentIndex - recentPointSkipCount)
-        guard searchEnd > minimumOutboundSamples else { return nil }
+        let searchEnd = max(legStartIndex, currentIndex - recentPointSkipCount)
+        guard searchEnd > legStartIndex + minimumOutboundSamples else { return nil }
 
         var bestIndex: Int?
         var bestDistance = CLLocationDistance.infinity
 
-        if searchEnd >= 2 {
-            for index in 0..<(searchEnd - 1) {
+        if searchEnd >= legStartIndex + 2 {
+            for index in legStartIndex..<(searchEnd - 1) {
                 let distance = segmentDistance(
                     from: current,
                     segmentStart: locations[index],
@@ -194,7 +227,7 @@ struct BacktrackFlyerDetector {
             }
         }
 
-        for index in 0..<searchEnd {
+        for index in legStartIndex..<searchEnd {
             let distance = current.distance(from: locations[index])
             if distance <= tolerance, distance < bestDistance {
                 bestDistance = distance
