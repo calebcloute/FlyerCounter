@@ -14,6 +14,7 @@ final class LocationManager: NSObject, ObservableObject {
     @Published private(set) var needsPausedRouteNaming = false
     @Published private(set) var lastAutoFlyerDetectionMessage: String?
     @Published private(set) var lastAutoFlyerDetectionDate: Date?
+    @Published private(set) var backtrackDetectionStatus: String?
 
     private let manager = CLLocationManager()
     private var lastRecordedLocation: CLLocation?
@@ -472,6 +473,7 @@ final class LocationManager: NSObject, ObservableObject {
               let index = routes.firstIndex(where: { $0.id == activeRouteId }) else { return }
 
         update(&routes[index])
+        routes = routes
         persistArchive()
     }
 
@@ -627,15 +629,17 @@ final class LocationManager: NSObject, ObservableObject {
               isViewingActiveRoute,
               autoFlyerSettings.isEnabled,
               let route = activeRoute else {
+            backtrackDetectionStatus = nil
             return
         }
 
-        guard let result = backtrackFlyerDetector.evaluate(
+        let evaluation = backtrackFlyerDetector.evaluate(
             routePoints: route.routePoints,
             settings: autoFlyerSettings.backtrack
-        ) else {
-            return
-        }
+        )
+        backtrackDetectionStatus = evaluation.statusMessage
+
+        guard let result = evaluation.result else { return }
 
         recordFlyerDrop(at: location, source: .autoBacktrack, note: result.note)
     }

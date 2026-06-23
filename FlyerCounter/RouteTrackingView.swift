@@ -480,15 +480,15 @@ struct RouteTrackingView: View {
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.green)
 
+                Text(locationManager.backtrackDetectionStatus ?? "Watching for backtrack overlap while you walk.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
                 if let message = locationManager.lastAutoFlyerDetectionMessage,
                    let date = locationManager.lastAutoFlyerDetectionDate {
                     Text("Last auto count · \(message) · \(autoCountRelativeDate(date))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                } else {
-                    Text("Watching for backtrack overlap while you walk.")
-                        .font(.caption)
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
