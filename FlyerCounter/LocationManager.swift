@@ -134,6 +134,13 @@ final class LocationManager: NSObject, ObservableObject {
         isTracking && isViewingActiveRoute && flyerCount > 0
     }
 
+    func refreshBackgroundRecordingIfNeeded() {
+        guard isTracking, isLocationAuthorized else { return }
+        configureBackgroundLocationIfNeeded()
+        guard shouldMonitorLocation else { return }
+        manager.startUpdatingLocation()
+    }
+
     func prepareForUse() {
         refreshAuthorizationStatus()
         updateStatusMessage()
@@ -561,16 +568,37 @@ final class LocationManager: NSObject, ObservableObject {
     }
 
     private func configureBackgroundLocationIfNeeded() {
-        let enableBackground = hasBackgroundLocationAuthorization
-            && isTracking
-            && hasLocationBackgroundMode
+        let wantsBackground = hasBackgroundLocationAuthorization && isTracking
+        let canUseBackground = wantsBackground && hasLocationBackgroundMode
+        let wasBackgroundEnabled = manager.allowsBackgroundLocationUpdates
 
-        manager.showsBackgroundLocationIndicator = enableBackground
-        manager.allowsBackgroundLocationUpdates = enableBackground
+        manager.showsBackgroundLocationIndicator = canUseBackground
+        manager.allowsBackgroundLocationUpdates = canUseBackground
 
-        if hasBackgroundLocationAuthorization, isTracking, !hasLocationBackgroundMode {
-            statusMessage = "Route recording works in the app, but background recording needs Location Updates enabled under Background Modes in Xcode."
+        if canUseBackground, !wasBackgroundEnabled, shouldMonitorLocation {
+            manager.stopUpdatingLocation()
+            manager.startUpdatingLocation()
         }
+
+        updateTrackingStatusMessage()
+    }
+
+    private func updateTrackingStatusMessage() {
+        guard isTracking else { return }
+
+        if !hasBackgroundLocationAuthorization {
+            statusMessage =
+                "Route only records while Flyer Counter is open. " +
+                "Set Location to Always in Settings for lock screen recording."
+            return
+        }
+
+        if !hasLocationBackgroundMode {
+            statusMessage = "Lock screen recording isn't enabled in this build."
+            return
+        }
+
+        statusMessage = nil
     }
 
     private func requestAlwaysLocationAuthorization() {
@@ -639,11 +667,7 @@ final class LocationManager: NSObject, ObservableObject {
 
     private func updateStatusMessage() {
         guard !isTracking else {
-            if hasBackgroundLocationAuthorization, !hasLocationBackgroundMode {
-                statusMessage = "Route recording works in the app, but background recording needs Location Updates enabled under Background Modes in Xcode."
-            } else {
-                statusMessage = nil
-            }
+            updateTrackingStatusMessage()
             return
         }
 

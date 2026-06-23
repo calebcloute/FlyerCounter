@@ -50,11 +50,16 @@ struct ContentView: View {
             syncActiveBoundaryOverlay()
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
+            switch newPhase {
+            case .active:
                 locationManager.updateAutoFlyerSettings(autoFlyerSettingsStore.settings)
                 locationManager.prepareForUse()
                 syncActiveBoundaryOverlay()
                 showRouteTrackingForPausedNamingIfNeeded()
+            case .background:
+                locationManager.refreshBackgroundRecordingIfNeeded()
+            default:
+                break
             }
         }
     }
