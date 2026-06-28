@@ -1,87 +1,80 @@
 import CoreLocation
 import Foundation
 
-struct CompassTurnaroundFlyerDetector {
-    private struct HeadingSample {
-        let date: Date
-        let heading: Double
-    }
+struct AutoFlyerDetectionResult {
+    let coordinate: CLLocationCoordinate2D
+    let note: String
+}
 
-    private var headingHistory: [HeadingSample] = []
+struct AutoFlyerEvaluation {
+    let result: AutoFlyerDetectionResult?
+    let statusMessage: String
+}
+
+struct CompassTurnaroundFlyerDetector {
+    static let sampleIntervalSeconds: TimeInterval = 2
+
+    /// Heading captured at the most recent 2-second tick boundary. Updates only on ticks.
+    private(set) var lastTickHeading: Double?
     private var lastAutoCountDate: Date?
 
-    private let directionLookbackSeconds: TimeInterval = 3
-    private let historyRetentionSeconds: TimeInterval = 30
-
     mutating func reset() {
-        headingHistory = []
+        lastTickHeading = nil
         lastAutoCountDate = nil
     }
 
-    mutating func evaluate(
+    /// Seeds the T=0 tick when recording starts.
+    mutating func seedInitialTick(_ heading: Double) {
+        lastTickHeading = heading
+    }
+
+    /// Advances `recent` to a new fixed tick snapshot.
+    mutating func advanceTick(to heading: Double) {
+        lastTickHeading = heading
+    }
+
+    /// Compares live compass heading against the last tick (`recent`). Called on every heading update.
+    mutating func evaluateLive(
         deviceHeading: Double?,
         settings: CompassTurnaroundSettings,
         now: Date = Date()
-    ) -> BacktrackEvaluation {
+    ) -> AutoFlyerEvaluation {
+        guard let facing = deviceHeading else {
+            return AutoFlyerEvaluation(result: nil, statusMessage: "Waiting for compass")
+        }
+
+        guard let recent = lastTickHeading else {
+            return AutoFlyerEvaluation(
+                result: nil,
+                statusMessage: "Facing \(Int(facing))° · waiting for first tick…"
+            )
+        }
+
+        let turnaroundDelta = bearingDifference(facing, recent)
+        var statusMessage =
+            "Facing \(Int(facing))° · recent \(Int(recent))° · " +
+            "turn Δ\(Int(turnaroundDelta))° (need \(Int(settings.turnaroundThresholdDegrees))°)"
+
         if let lastAutoCountDate,
            now.timeIntervalSince(lastAutoCountDate) < settings.cooldownSeconds {
             let remaining = Int(settings.cooldownSeconds - now.timeIntervalSince(lastAutoCountDate))
-            return BacktrackEvaluation(
-                result: nil,
-                statusMessage: "Cooldown · \(max(1, remaining))s"
-            )
+            statusMessage += " · cooldown \(max(1, remaining))s"
+            return AutoFlyerEvaluation(result: nil, statusMessage: statusMessage)
         }
-
-        guard let deviceHeading else {
-            return BacktrackEvaluation(result: nil, statusMessage: "Waiting for compass")
-        }
-
-        pruneHistory(now: now)
-        headingHistory.append(HeadingSample(date: now, heading: deviceHeading))
-
-        guard let recentDirection = recentDirectionHeading(at: now) else {
-            return BacktrackEvaluation(
-                result: nil,
-                statusMessage: "Establishing recent direction…"
-            )
-        }
-
-        let turnaroundDelta = bearingDifference(deviceHeading, recentDirection)
 
         guard turnaroundDelta >= settings.turnaroundThresholdDegrees else {
-            return BacktrackEvaluation(
-                result: nil,
-                statusMessage:
-                    "Facing \(Int(deviceHeading))° · recent \(Int(recentDirection))° · " +
-                    "turn Δ\(Int(turnaroundDelta))° (need \(Int(settings.turnaroundThresholdDegrees))°)"
-            )
+            return AutoFlyerEvaluation(result: nil, statusMessage: statusMessage)
         }
 
         lastAutoCountDate = now
 
-        return BacktrackEvaluation(
-            result: BacktrackDetectionResult(
+        return AutoFlyerEvaluation(
+            result: AutoFlyerDetectionResult(
                 coordinate: CLLocationCoordinate2D(),
                 note: "Turnaround · Δ\(Int(turnaroundDelta))°"
             ),
             statusMessage: "Counted · turnaround Δ\(Int(turnaroundDelta))°"
         )
-    }
-
-    private mutating func pruneHistory(now: Date) {
-        let cutoff = now.addingTimeInterval(-historyRetentionSeconds)
-        headingHistory.removeAll { $0.date < cutoff }
-    }
-
-    private func recentDirectionHeading(at date: Date) -> Double? {
-        guard let earliest = headingHistory.first else { return nil }
-
-        let target = date.addingTimeInterval(-directionLookbackSeconds)
-        guard earliest.date <= target else { return nil }
-
-        return headingHistory.min {
-            abs($0.date.timeIntervalSince(target)) < abs($1.date.timeIntervalSince(target))
-        }?.heading
     }
 
     private func bearingDifference(_ lhs: Double, _ rhs: Double) -> Double {

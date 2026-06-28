@@ -475,16 +475,19 @@ struct RouteTrackingView: View {
     @ViewBuilder
     private var autoFlyerCountingStatus: some View {
         if autoFlyerSettingsStore.settings.isEnabled {
-            let method = autoFlyerSettingsStore.settings.method
             VStack(spacing: 4) {
                 Label(
-                    "Auto counting: \(method.label)",
-                    systemImage: method == .compassTurnaround ? "arrow.uturn.down" : "point.topleft.down.to.point.bottomright.filled.curvepath"
+                    "Auto counting: Turnaround",
+                    systemImage: "arrow.uturn.down"
                 )
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(method == .compassTurnaround ? .blue : .green)
+                    .foregroundStyle(.blue)
 
-                Text(locationManager.backtrackDetectionStatus ?? method.statusDescription)
+                Text(
+                    locationManager.autoFlyerDetectionStatus
+                        ?? "Live compass vs last 2 s tick — watching for sharp turnarounds."
+                )
+                    .id(locationManager.autoFlyerStatusUpdatedAt)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
