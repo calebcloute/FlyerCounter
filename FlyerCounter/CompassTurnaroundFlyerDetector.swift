@@ -32,6 +32,12 @@ struct CompassTurnaroundFlyerDetector {
         lastAutoCountDate = nil
     }
 
+    /// Clears history and starts the route with an initial cooldown before auto counting can begin.
+    mutating func beginRouteSession(at date: Date = Date()) {
+        headingHistory = []
+        lastAutoCountDate = date
+    }
+
     /// Compares live heading to the heading from exactly `comparisonLookbackSeconds` ago.
     mutating func evaluateLive(
         deviceHeading: Double?,

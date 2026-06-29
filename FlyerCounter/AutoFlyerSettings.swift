@@ -81,8 +81,8 @@ struct CompassTurnaroundSettingsSection: View {
         } footer: {
             Text(
                 "Counts a flyer when live compass heading exceeds the turn threshold compared to " +
-                "where you were facing exactly 2 seconds ago. Keeps sampling and counting on the lock " +
-                "screen while a route is recording. Hold the phone upright in portrait for best results."
+                "where you were facing exactly 2 seconds ago. Each new or resumed route starts with a cooldown " +
+                "(same length as above) before auto counting begins. Hold the phone upright in portrait for best results."
             )
             .foregroundStyle(.secondary)
         }

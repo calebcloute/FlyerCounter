@@ -479,7 +479,7 @@ final class LocationManager: NSObject, ObservableObject {
         statusMessage = nil
         lastAutoFlyerDetectionMessage = nil
         lastAutoFlyerDetectionDate = nil
-        compassTurnaroundFlyerDetector.reset()
+        compassTurnaroundFlyerDetector.beginRouteSession()
         routeSessionTracker.reset()
         liveRouteStats = .idle
         startLocationUpdatesIfNeeded()
@@ -511,6 +511,7 @@ final class LocationManager: NSObject, ObservableObject {
             )
         }
 
+        compassTurnaroundFlyerDetector.beginRouteSession()
         startLocationUpdatesIfNeeded()
         refreshHeadingUpdatesIfNeeded()
         persistArchive()
