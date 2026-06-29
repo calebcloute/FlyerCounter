@@ -296,7 +296,7 @@ struct RouteSegmentMarker: Identifiable, Codable, Equatable {
     }
 }
 
-struct StoredCoordinate: Codable {
+struct StoredCoordinate: Codable, Equatable {
     let latitude: Double
     let longitude: Double
 
