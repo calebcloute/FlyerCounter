@@ -44,6 +44,13 @@ struct CompassTurnaroundFlyerDetector {
 
         recordSample(heading: facing, at: now)
 
+        if let cooldownRemaining = cooldownRemainingSeconds(now: now, settings: settings) {
+            return AutoFlyerEvaluation(
+                result: nil,
+                statusMessage: "Facing \(Int(facing))° · cooldown \(cooldownRemaining)s"
+            )
+        }
+
         guard let recent = headingAtLookback(from: now, settings: settings) else {
             return AutoFlyerEvaluation(
                 result: nil,
@@ -55,11 +62,6 @@ struct CompassTurnaroundFlyerDetector {
         let statusMessage =
             "Facing \(Int(facing))° · recent \(Int(recent))° · " +
             "turn Δ\(Int(turnaroundDelta))° (need \(Int(settings.turnaroundThresholdDegrees))°)"
-
-        if let lastAutoCountDate,
-           now.timeIntervalSince(lastAutoCountDate) < settings.cooldownSeconds {
-            return AutoFlyerEvaluation(result: nil, statusMessage: statusMessage)
-        }
 
         guard turnaroundDelta >= settings.turnaroundThresholdDegrees else {
             return AutoFlyerEvaluation(result: nil, statusMessage: statusMessage)
@@ -74,6 +76,16 @@ struct CompassTurnaroundFlyerDetector {
             ),
             statusMessage: "Counted · turnaround Δ\(Int(turnaroundDelta))°"
         )
+    }
+
+    private func cooldownRemainingSeconds(now: Date, settings: CompassTurnaroundSettings) -> Int? {
+        guard let lastAutoCountDate,
+              now.timeIntervalSince(lastAutoCountDate) < settings.cooldownSeconds else {
+            return nil
+        }
+
+        let remaining = Int(settings.cooldownSeconds - now.timeIntervalSince(lastAutoCountDate))
+        return max(1, remaining)
     }
 
     private mutating func recordSample(heading: Double, at date: Date) {
