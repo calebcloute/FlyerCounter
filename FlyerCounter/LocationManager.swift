@@ -110,6 +110,7 @@ final class LocationManager: NSObject, ObservableObject {
         reloadSavedRouteAnalytics()
         BoundaryNotificationScheduler.prepare()
         AutoFlyerCountFeedback.prepare()
+        VoiceFeedback.prepare()
     }
 
     private func reloadSavedRouteAnalytics() {
@@ -480,6 +481,7 @@ final class LocationManager: NSObject, ObservableObject {
         lastAutoFlyerDetectionMessage = nil
         lastAutoFlyerDetectionDate = nil
         compassTurnaroundFlyerDetector.beginRouteSession()
+        VoiceFeedback.resetCooldownTracking()
         routeSessionTracker.reset()
         liveRouteStats = .idle
         startLocationUpdatesIfNeeded()
@@ -512,6 +514,7 @@ final class LocationManager: NSObject, ObservableObject {
         }
 
         compassTurnaroundFlyerDetector.beginRouteSession()
+        VoiceFeedback.resetCooldownTracking()
         startLocationUpdatesIfNeeded()
         refreshHeadingUpdatesIfNeeded()
         persistArchive()
@@ -838,6 +841,10 @@ final class LocationManager: NSObject, ObservableObject {
         if isViewingActiveRoute {
             autoFlyerDetectionStatus = evaluation.statusMessage
             autoFlyerStatusUpdatedAt = Date()
+        }
+
+        if autoFlyerSettings.isVoiceFeedbackEnabled {
+            VoiceFeedback.handle(evaluation: evaluation)
         }
 
         guard let result = evaluation.result else { return }

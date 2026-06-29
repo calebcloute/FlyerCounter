@@ -9,6 +9,7 @@ struct CompassTurnaroundSettings: Codable, Equatable {
 
 struct AutoFlyerSettings: Codable, Equatable {
     var isEnabled: Bool = false
+    var isVoiceFeedbackEnabled: Bool = false
     var turnaround = CompassTurnaroundSettings()
 }
 
@@ -101,12 +102,15 @@ struct AutomaticFlyerCountingSection: View {
             Text(
                 "Uses compass heading change (turnaround detection) while a route is recording. " +
                 "Manual +1 and -1 still work. Each auto count gives one vibration in the app, " +
-                "or a notification on the lock screen."
+                "or a notification on the lock screen. Voice announcements work on the lock screen " +
+                "when Speak announcements is on."
             )
             .foregroundStyle(.secondary)
         }
 
         if store.settings.isEnabled {
+            Toggle("Speak announcements", isOn: $store.settings.isVoiceFeedbackEnabled)
+
             CompassTurnaroundSettingsSection(settings: $store.settings.turnaround)
         }
     }

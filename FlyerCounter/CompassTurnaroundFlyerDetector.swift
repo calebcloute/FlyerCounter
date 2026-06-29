@@ -9,6 +9,20 @@ struct AutoFlyerDetectionResult {
 struct AutoFlyerEvaluation {
     let result: AutoFlyerDetectionResult?
     let statusMessage: String
+    let countedTurnDeltaDegrees: Int?
+    let cooldownRemainingSeconds: Int?
+
+    init(
+        result: AutoFlyerDetectionResult?,
+        statusMessage: String,
+        countedTurnDeltaDegrees: Int? = nil,
+        cooldownRemainingSeconds: Int? = nil
+    ) {
+        self.result = result
+        self.statusMessage = statusMessage
+        self.countedTurnDeltaDegrees = countedTurnDeltaDegrees
+        self.cooldownRemainingSeconds = cooldownRemainingSeconds
+    }
 }
 
 struct CompassTurnaroundFlyerDetector {
@@ -53,7 +67,8 @@ struct CompassTurnaroundFlyerDetector {
         if let cooldownRemaining = cooldownRemainingSeconds(now: now, settings: settings) {
             return AutoFlyerEvaluation(
                 result: nil,
-                statusMessage: "Facing \(Int(facing))° · cooldown \(cooldownRemaining)s"
+                statusMessage: "Facing \(Int(facing))° · cooldown \(cooldownRemaining)s",
+                cooldownRemainingSeconds: cooldownRemaining
             )
         }
 
@@ -80,7 +95,8 @@ struct CompassTurnaroundFlyerDetector {
                 coordinate: CLLocationCoordinate2D(),
                 note: "Turnaround · Δ\(Int(turnaroundDelta))°"
             ),
-            statusMessage: "Counted · turnaround Δ\(Int(turnaroundDelta))°"
+            statusMessage: "Counted · turnaround Δ\(Int(turnaroundDelta))°",
+            countedTurnDeltaDegrees: Int(turnaroundDelta)
         )
     }
 
