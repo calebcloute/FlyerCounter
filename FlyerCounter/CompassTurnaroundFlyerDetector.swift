@@ -11,17 +11,20 @@ struct AutoFlyerEvaluation {
     let statusMessage: String
     let countedTurnDeltaDegrees: Int?
     let cooldownRemainingSeconds: Int?
+    let isEstablishingLookback: Bool
 
     init(
         result: AutoFlyerDetectionResult?,
         statusMessage: String,
         countedTurnDeltaDegrees: Int? = nil,
-        cooldownRemainingSeconds: Int? = nil
+        cooldownRemainingSeconds: Int? = nil,
+        isEstablishingLookback: Bool = false
     ) {
         self.result = result
         self.statusMessage = statusMessage
         self.countedTurnDeltaDegrees = countedTurnDeltaDegrees
         self.cooldownRemainingSeconds = cooldownRemainingSeconds
+        self.isEstablishingLookback = isEstablishingLookback
     }
 }
 
@@ -75,7 +78,8 @@ struct CompassTurnaroundFlyerDetector {
         guard let recent = headingAtLookback(from: now, settings: settings) else {
             return AutoFlyerEvaluation(
                 result: nil,
-                statusMessage: "Facing \(Int(facing))° · establishing 2 s lookback…"
+                statusMessage: "Facing \(Int(facing))° · establishing 2 s lookback…",
+                isEstablishingLookback: true
             )
         }
 

@@ -103,13 +103,13 @@ struct AutomaticFlyerCountingSection: View {
                 "Uses compass heading change (turnaround detection) while a route is recording. " +
                 "Manual +1 and -1 still work. Each auto count gives one vibration in the app, " +
                 "or a notification on the lock screen. Voice announcements work on the lock screen " +
-                "when Speak announcements is on."
+                "when Speak testing announcements is on."
             )
             .foregroundStyle(.secondary)
         }
 
         if store.settings.isEnabled {
-            Toggle("Speak announcements", isOn: $store.settings.isVoiceFeedbackEnabled)
+            Toggle("Speak testing announcements", isOn: $store.settings.isVoiceFeedbackEnabled)
 
             CompassTurnaroundSettingsSection(settings: $store.settings.turnaround)
         }
