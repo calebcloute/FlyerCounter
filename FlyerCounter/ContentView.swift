@@ -2,8 +2,9 @@ import SwiftUI
 
 private enum AppTab: Int {
     case routeTracking = 0
-    case testingStats = 1
-    case settings = 2
+    case routePlanner = 1
+    case testingStats = 2
+    case settings = 3
 }
 
 struct ContentView: View {
@@ -11,12 +12,14 @@ struct ContentView: View {
     @StateObject private var routeMethodsStore = RouteMethodsStore()
     @StateObject private var neighborhoodTypesStore = NeighborhoodTypesStore()
     @StateObject private var areaBoundariesStore = AreaBoundariesStore()
+    @StateObject private var plannedRouteStore = PlannedRouteStore()
     @StateObject private var autoFlyerSettingsStore = AutoFlyerSettingsStore()
     @StateObject private var boundaryAlertSettingsStore = BoundaryAlertSettingsStore()
 
     @AppStorage("selectedTab") private var selectedTab = AppTab.routeTracking.rawValue
     @AppStorage("activeOverlayBoundaryId") private var activeOverlayBoundaryIdRaw = ""
     @AppStorage("didMigrateTestingTab") private var didMigrateTestingTab = false
+    @AppStorage("didMigratePlannerTab") private var didMigratePlannerTab = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -28,6 +31,12 @@ struct ContentView: View {
                 Label("Route Tracking", systemImage: "map")
             }
             .tag(AppTab.routeTracking.rawValue)
+
+            RoutePlannerView()
+                .tabItem {
+                    Label("Route Planner", systemImage: "point.bottomleft.forward.to.point.topright.scurvepath")
+                }
+                .tag(AppTab.routePlanner.rawValue)
 
             TestingStatsView(locationManager: locationManager)
                 .tabItem {
@@ -44,6 +53,7 @@ struct ContentView: View {
         .environmentObject(routeMethodsStore)
         .environmentObject(neighborhoodTypesStore)
         .environmentObject(areaBoundariesStore)
+        .environmentObject(plannedRouteStore)
         .environmentObject(autoFlyerSettingsStore)
         .environmentObject(boundaryAlertSettingsStore)
         .onAppear {
@@ -52,6 +62,7 @@ struct ContentView: View {
             locationManager.updateBoundaryAlertSettings(boundaryAlertSettingsStore.settings)
             locationManager.prepareForUse()
             syncActiveBoundaryOverlay()
+            syncActivePlannedRoute()
             showRouteTrackingForPausedNamingIfNeeded()
         }
         .onChange(of: autoFlyerSettingsStore.settings) { _, newSettings in
@@ -63,6 +74,12 @@ struct ContentView: View {
         .onChange(of: activeOverlayBoundaryIdRaw) { _, _ in
             syncActiveBoundaryOverlay()
         }
+        .onChange(of: plannedRouteStore.activeRouteId) { _, _ in
+            syncActivePlannedRoute()
+        }
+        .onChange(of: plannedRouteStore.routes) { _, _ in
+            syncActivePlannedRoute()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
@@ -70,6 +87,7 @@ struct ContentView: View {
                 locationManager.updateBoundaryAlertSettings(boundaryAlertSettingsStore.settings)
                 locationManager.prepareForUse()
                 syncActiveBoundaryOverlay()
+                syncActivePlannedRoute()
                 showRouteTrackingForPausedNamingIfNeeded()
             case .inactive, .background:
                 locationManager.refreshBackgroundRecordingIfNeeded()
@@ -80,11 +98,24 @@ struct ContentView: View {
     }
 
     private func migrateSelectedTabIfNeeded() {
-        guard !didMigrateTestingTab else { return }
-        if selectedTab == 1 {
-            selectedTab = AppTab.settings.rawValue
+        if !didMigrateTestingTab {
+            if selectedTab == 1 {
+                selectedTab = AppTab.settings.rawValue
+            }
+            didMigrateTestingTab = true
         }
-        didMigrateTestingTab = true
+
+        guard !didMigratePlannerTab else { return }
+        if selectedTab >= AppTab.routePlanner.rawValue {
+            selectedTab += 1
+        }
+        didMigratePlannerTab = true
+    }
+
+    private func syncActivePlannedRoute() {
+        locationManager.setActivePlannedRoute(
+            coordinates: plannedRouteStore.activeRoute?.pathCoordinates
+        )
     }
 
     private func syncActiveBoundaryOverlay() {

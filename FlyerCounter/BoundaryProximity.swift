@@ -46,6 +46,29 @@ enum BoundaryProximity {
 
     static func nearestDistance(
         from location: CLLocation,
+        toPolyline coordinates: [CLLocationCoordinate2D]
+    ) -> CLLocationDistance {
+        guard coordinates.count >= 2 else {
+            guard let first = coordinates.first else { return .infinity }
+            return location.distance(
+                from: CLLocation(latitude: first.latitude, longitude: first.longitude)
+            )
+        }
+
+        var minimum = CLLocationDistance.infinity
+        for index in 0..<(coordinates.count - 1) {
+            let segmentDistance = distance(
+                from: location,
+                segmentStart: coordinates[index],
+                segmentEnd: coordinates[index + 1]
+            )
+            minimum = min(minimum, segmentDistance)
+        }
+        return minimum
+    }
+
+    static func nearestDistance(
+        from location: CLLocation,
         toClosedPolygon coordinates: [CLLocationCoordinate2D]
     ) -> CLLocationDistance {
         guard let first = coordinates.first else { return .infinity }

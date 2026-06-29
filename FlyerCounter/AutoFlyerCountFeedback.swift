@@ -59,7 +59,7 @@ extension FlyerDropSource {
         switch self {
         case .manual:
             false
-        case .autoBacktrack, .autoCompassTurnaround:
+        case .autoBacktrack, .autoCompassTurnaround, .autoPlannedRoute:
             true
         }
     }

@@ -5,6 +5,7 @@ enum FlyerDropSource: String, Codable {
     case manual
     case autoBacktrack
     case autoCompassTurnaround
+    case autoPlannedRoute
 }
 
 struct FlyerDrop: Identifiable, Codable {

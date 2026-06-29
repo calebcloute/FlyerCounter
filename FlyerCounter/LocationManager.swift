@@ -17,6 +17,7 @@ final class LocationManager: NSObject, ObservableObject {
     @Published private(set) var lastAutoFlyerDetectionDate: Date?
     @Published private(set) var autoFlyerDetectionStatus: String?
     @Published private(set) var autoFlyerStatusUpdatedAt: Date?
+    @Published private(set) var activePlannedRouteCoordinates: [CLLocationCoordinate2D] = []
     @Published private(set) var liveRouteStats: RouteLiveStats = .idle
     @Published private(set) var savedRouteAnalytics: [RouteSessionSnapshot] = []
 
@@ -34,6 +35,7 @@ final class LocationManager: NSObject, ObservableObject {
     private var autoFlyerSettings = AutoFlyerSettings()
     private var boundaryAlertSettings = BoundaryAlertSettings()
     private var compassTurnaroundFlyerDetector = CompassTurnaroundFlyerDetector()
+    private var plannedRouteDivergenceFlyerDetector = PlannedRouteDivergenceFlyerDetector()
     private var autoFlyerSampleTimer: Timer?
     private var backgroundActivitySession: CLBackgroundActivitySession?
     private var currentDeviceHeading: CLLocationDirection?
@@ -168,6 +170,7 @@ final class LocationManager: NSObject, ObservableObject {
     private func refreshBackgroundAutoFlyerHeadingIfNeeded() {
         guard isTracking,
               autoFlyerSettings.isEnabled,
+              autoFlyerSettings.method == .compassTurnaround,
               CLLocationManager.headingAvailable() else { return }
 
         manager.headingFilter = kCLHeadingFilterNone
@@ -200,6 +203,10 @@ final class LocationManager: NSObject, ObservableObject {
         if !settings.isEnabled {
             isNearActiveBoundary = false
         }
+    }
+
+    func setActivePlannedRoute(coordinates: [CLLocationCoordinate2D]?) {
+        activePlannedRouteCoordinates = coordinates ?? []
     }
 
     func setActiveBoundaryOverlay(coordinates: [CLLocationCoordinate2D]?) {
@@ -481,6 +488,7 @@ final class LocationManager: NSObject, ObservableObject {
         lastAutoFlyerDetectionMessage = nil
         lastAutoFlyerDetectionDate = nil
         compassTurnaroundFlyerDetector.beginRouteSession()
+        plannedRouteDivergenceFlyerDetector.beginRouteSession()
         VoiceFeedback.resetCooldownTracking()
         routeSessionTracker.reset()
         liveRouteStats = .idle
@@ -514,6 +522,7 @@ final class LocationManager: NSObject, ObservableObject {
         }
 
         compassTurnaroundFlyerDetector.beginRouteSession()
+        plannedRouteDivergenceFlyerDetector.beginRouteSession()
         VoiceFeedback.resetCooldownTracking()
         startLocationUpdatesIfNeeded()
         refreshHeadingUpdatesIfNeeded()
@@ -650,6 +659,7 @@ final class LocationManager: NSObject, ObservableObject {
     private func refreshHeadingUpdatesIfNeeded() {
         guard isTracking,
               autoFlyerSettings.isEnabled,
+              autoFlyerSettings.method == .compassTurnaround,
               CLLocationManager.headingAvailable() else {
             manager.stopUpdatingHeading()
             currentDeviceHeading = nil
@@ -666,6 +676,7 @@ final class LocationManager: NSObject, ObservableObject {
     private func refreshAutoFlyerMonitoring() {
         let shouldDetect = isTracking
             && autoFlyerSettings.isEnabled
+            && autoFlyerSettings.method == .compassTurnaround
             && CLLocationManager.headingAvailable()
 
         guard shouldDetect else {
@@ -831,12 +842,26 @@ final class LocationManager: NSObject, ObservableObject {
     private func evaluateAutomaticFlyerCounting(for location: CLLocation? = nil) {
         guard isTracking, autoFlyerSettings.isEnabled else { return }
 
-        refreshLatestDeviceHeadingFromManager()
+        let evaluation: AutoFlyerEvaluation
+        let dropSource: FlyerDropSource
 
-        let evaluation = compassTurnaroundFlyerDetector.evaluateLive(
-            deviceHeading: latestSampledDeviceHeading(),
-            settings: autoFlyerSettings.turnaround
-        )
+        switch autoFlyerSettings.method {
+        case .compassTurnaround:
+            refreshLatestDeviceHeadingFromManager()
+            evaluation = compassTurnaroundFlyerDetector.evaluateLive(
+                deviceHeading: latestSampledDeviceHeading(),
+                settings: autoFlyerSettings.turnaround
+            )
+            dropSource = .autoCompassTurnaround
+        case .plannedRouteDivergence:
+            guard let sampleLocation = location ?? currentLocation else { return }
+            evaluation = plannedRouteDivergenceFlyerDetector.evaluate(
+                location: sampleLocation,
+                planCoordinates: activePlannedRouteCoordinates,
+                settings: autoFlyerSettings.plannedRoute
+            )
+            dropSource = .autoPlannedRoute
+        }
 
         if isViewingActiveRoute {
             autoFlyerDetectionStatus = evaluation.statusMessage
@@ -850,7 +875,7 @@ final class LocationManager: NSObject, ObservableObject {
         guard let result = evaluation.result else { return }
         guard let dropLocation = location ?? currentLocation else { return }
 
-        recordFlyerDrop(at: dropLocation, source: .autoCompassTurnaround, note: result.note)
+        recordFlyerDrop(at: dropLocation, source: dropSource, note: result.note)
     }
 
     private func currentEndCoordinate(for route: RouteRecord) -> CLLocationCoordinate2D? {
@@ -971,7 +996,12 @@ extension LocationManager: CLLocationManagerDelegate {
         Task { @MainActor in
             updateDeviceHeading(from: newHeading)
             if isTracking, autoFlyerSettings.isEnabled {
-                evaluateAutomaticFlyerCounting()
+                switch autoFlyerSettings.method {
+                case .compassTurnaround:
+                    evaluateAutomaticFlyerCounting()
+                case .plannedRouteDivergence:
+                    break
+                }
             }
         }
     }

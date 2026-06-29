@@ -269,6 +269,11 @@ struct RouteTrackingView: View {
             if let overlayBoundary = overlayBoundary {
                 OutsideBoundaryRing(coordinates: overlayBoundary.coordinates)
             }
+
+            if locationManager.activePlannedRouteCoordinates.count >= 2 {
+                MapPolyline(coordinates: locationManager.activePlannedRouteCoordinates)
+                    .stroke(.green, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+            }
         }
         .mapControls {
             if locationManager.isLocationAuthorized && locationManager.isViewingActiveRoute {
@@ -477,15 +482,15 @@ struct RouteTrackingView: View {
         if autoFlyerSettingsStore.settings.isEnabled {
             VStack(spacing: 4) {
                 Label(
-                    "Auto counting: Turnaround",
-                    systemImage: "arrow.uturn.down"
+                    autoFlyerMethodLabel,
+                    systemImage: autoFlyerMethodIcon
                 )
                     .font(.footnote.weight(.semibold))
                     .foregroundStyle(.blue)
 
                 Text(
                     locationManager.autoFlyerDetectionStatus
-                        ?? "Live compass vs 2 s ago — watching for sharp turnarounds."
+                        ?? autoFlyerDefaultStatusMessage
                 )
                     .id(locationManager.autoFlyerStatusUpdatedAt)
                     .font(.caption)
@@ -504,6 +509,35 @@ struct RouteTrackingView: View {
         }
     }
 
+    private var autoFlyerMethodLabel: String {
+        switch autoFlyerSettingsStore.settings.method {
+        case .compassTurnaround:
+            "Auto counting: Turnaround"
+        case .plannedRouteDivergence:
+            "Auto counting: Planned route"
+        }
+    }
+
+    private var autoFlyerMethodIcon: String {
+        switch autoFlyerSettingsStore.settings.method {
+        case .compassTurnaround:
+            "arrow.uturn.down"
+        case .plannedRouteDivergence:
+            "point.bottomleft.forward.to.point.topright.scurvepath"
+        }
+    }
+
+    private var autoFlyerDefaultStatusMessage: String {
+        switch autoFlyerSettingsStore.settings.method {
+        case .compassTurnaround:
+            "Live compass vs 2 s ago — watching for sharp turnarounds."
+        case .plannedRouteDivergence:
+            locationManager.activePlannedRouteCoordinates.count >= 2
+                ? "Watching distance from the active walking plan."
+                : "Select an active plan in Route Planner."
+        }
+    }
+
     private func flyerDropColor(for source: FlyerDropSource) -> Color {
         switch source {
         case .manual:
@@ -512,6 +546,8 @@ struct RouteTrackingView: View {
             .green
         case .autoCompassTurnaround:
             .blue
+        case .autoPlannedRoute:
+            .green
         }
     }
 

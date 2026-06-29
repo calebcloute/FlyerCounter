@@ -26,6 +26,13 @@ enum VoiceFeedback {
     }
 
     static func handle(evaluation: AutoFlyerEvaluation) {
+        if let meters = evaluation.countedMetersFromPlan {
+            stopEstablishingWaitLoop()
+            lastSpokenCooldownSecond = nil
+            speakFlyerCountedFromPlan(meters: meters)
+            return
+        }
+
         if let degrees = evaluation.countedTurnDeltaDegrees {
             stopEstablishingWaitLoop()
             lastSpokenCooldownSecond = nil
@@ -56,6 +63,14 @@ enum VoiceFeedback {
     }
 
     private static func speakFlyerCounted(degrees: Int) {
+        speakFlyerAnnouncement("Flyer counted \(degrees) degrees")
+    }
+
+    private static func speakFlyerCountedFromPlan(meters: Int) {
+        speakFlyerAnnouncement("Flyer counted \(meters) meters from plan")
+    }
+
+    private static func speakFlyerAnnouncement(_ text: String) {
         configureAudioSession()
         isAnnouncingFlyerCount = true
 
@@ -63,7 +78,7 @@ enum VoiceFeedback {
             synthesizer.stopSpeaking(at: .immediate)
         }
 
-        let utterance = AVSpeechUtterance(string: "Flyer counted \(degrees) degrees")
+        let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate
         synthesizer.speak(utterance)

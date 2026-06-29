@@ -10,6 +10,7 @@ struct AutoFlyerEvaluation {
     let result: AutoFlyerDetectionResult?
     let statusMessage: String
     let countedTurnDeltaDegrees: Int?
+    let countedMetersFromPlan: Int?
     let cooldownRemainingSeconds: Int?
     let isEstablishingLookback: Bool
 
@@ -17,12 +18,14 @@ struct AutoFlyerEvaluation {
         result: AutoFlyerDetectionResult?,
         statusMessage: String,
         countedTurnDeltaDegrees: Int? = nil,
+        countedMetersFromPlan: Int? = nil,
         cooldownRemainingSeconds: Int? = nil,
         isEstablishingLookback: Bool = false
     ) {
         self.result = result
         self.statusMessage = statusMessage
         self.countedTurnDeltaDegrees = countedTurnDeltaDegrees
+        self.countedMetersFromPlan = countedMetersFromPlan
         self.cooldownRemainingSeconds = cooldownRemainingSeconds
         self.isEstablishingLookback = isEstablishingLookback
     }
