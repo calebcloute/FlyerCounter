@@ -44,7 +44,7 @@ struct CompassTurnaroundFlyerDetector {
 
         recordSample(heading: facing, at: now)
 
-        guard let recent = headingAtLookback(from: now) else {
+        guard let recent = headingAtLookback(from: now, settings: settings) else {
             return AutoFlyerEvaluation(
                 result: nil,
                 statusMessage: "Facing \(Int(facing))° · establishing 2 s lookback…"
@@ -52,14 +52,12 @@ struct CompassTurnaroundFlyerDetector {
         }
 
         let turnaroundDelta = bearingDifference(facing, recent)
-        var statusMessage =
+        let statusMessage =
             "Facing \(Int(facing))° · recent \(Int(recent))° · " +
             "turn Δ\(Int(turnaroundDelta))° (need \(Int(settings.turnaroundThresholdDegrees))°)"
 
         if let lastAutoCountDate,
            now.timeIntervalSince(lastAutoCountDate) < settings.cooldownSeconds {
-            let remaining = Int(settings.cooldownSeconds - now.timeIntervalSince(lastAutoCountDate))
-            statusMessage += " · cooldown \(max(1, remaining))s"
             return AutoFlyerEvaluation(result: nil, statusMessage: statusMessage)
         }
 
@@ -88,9 +86,16 @@ struct CompassTurnaroundFlyerDetector {
         headingHistory.removeAll { $0.date < cutoff }
     }
 
-    private func headingAtLookback(from now: Date) -> Double? {
+    private func headingAtLookback(from now: Date, settings: CompassTurnaroundSettings) -> Double? {
         let target = now.addingTimeInterval(-Self.comparisonLookbackSeconds)
-        let eligibleSamples = headingHistory.filter { $0.date <= target }
+        let cooldownEnd = lastAutoCountDate.map { $0.addingTimeInterval(settings.cooldownSeconds) }
+
+        let eligibleSamples = headingHistory.filter { sample in
+            guard sample.date <= target else { return false }
+            if let cooldownEnd, sample.date <= cooldownEnd { return false }
+            return true
+        }
+
         guard let closest = eligibleSamples.min(by: {
             target.timeIntervalSince($0.date) < target.timeIntervalSince($1.date)
         }) else {
