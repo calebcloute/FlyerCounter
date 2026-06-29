@@ -512,7 +512,9 @@ struct RouteTrackingView: View {
     private var autoFlyerMethodLabel: String {
         switch autoFlyerSettingsStore.settings.method {
         case .compassTurnaround:
-            "Auto counting: Turnaround"
+            "Auto counting: Turnaround (uses compass only)"
+        case .pathBacktrack:
+            "Auto counting: Backtrack (uses GPS only)"
         case .plannedRouteDivergence:
             "Auto counting: Planned route"
         }
@@ -522,6 +524,8 @@ struct RouteTrackingView: View {
         switch autoFlyerSettingsStore.settings.method {
         case .compassTurnaround:
             "arrow.uturn.down"
+        case .pathBacktrack:
+            "arrow.uturn.backward"
         case .plannedRouteDivergence:
             "point.bottomleft.forward.to.point.topright.scurvepath"
         }
@@ -531,6 +535,8 @@ struct RouteTrackingView: View {
         switch autoFlyerSettingsStore.settings.method {
         case .compassTurnaround:
             "Live compass vs 2 s ago — watching for sharp turnarounds."
+        case .pathBacktrack:
+            "Walk forward, then come within range of any part of your path line to count."
         case .plannedRouteDivergence:
             locationManager.activePlannedRouteCoordinates.count >= 2
                 ? "Watching distance from the active walking plan."
@@ -547,7 +553,7 @@ struct RouteTrackingView: View {
         case .autoCompassTurnaround:
             .blue
         case .autoPlannedRoute:
-            .green
+            .cyan
         }
     }
 

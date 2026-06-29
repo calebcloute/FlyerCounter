@@ -36,6 +36,7 @@ final class LocationManager: NSObject, ObservableObject {
     private var boundaryAlertSettings = BoundaryAlertSettings()
     private var compassTurnaroundFlyerDetector = CompassTurnaroundFlyerDetector()
     private var plannedRouteDivergenceFlyerDetector = PlannedRouteDivergenceFlyerDetector()
+    private var pathBacktrackFlyerDetector = PathBacktrackFlyerDetector()
     private var autoFlyerSampleTimer: Timer?
     private var backgroundActivitySession: CLBackgroundActivitySession?
     private var currentDeviceHeading: CLLocationDirection?
@@ -489,6 +490,7 @@ final class LocationManager: NSObject, ObservableObject {
         lastAutoFlyerDetectionDate = nil
         compassTurnaroundFlyerDetector.beginRouteSession()
         plannedRouteDivergenceFlyerDetector.beginRouteSession()
+        pathBacktrackFlyerDetector.beginRouteSession()
         VoiceFeedback.resetCooldownTracking()
         routeSessionTracker.reset()
         liveRouteStats = .idle
@@ -523,6 +525,7 @@ final class LocationManager: NSObject, ObservableObject {
 
         compassTurnaroundFlyerDetector.beginRouteSession()
         plannedRouteDivergenceFlyerDetector.beginRouteSession()
+        pathBacktrackFlyerDetector.beginRouteSession()
         VoiceFeedback.resetCooldownTracking()
         startLocationUpdatesIfNeeded()
         refreshHeadingUpdatesIfNeeded()
@@ -853,6 +856,14 @@ final class LocationManager: NSObject, ObservableObject {
                 settings: autoFlyerSettings.turnaround
             )
             dropSource = .autoCompassTurnaround
+        case .pathBacktrack:
+            guard let sampleLocation = location ?? currentLocation else { return }
+            evaluation = pathBacktrackFlyerDetector.evaluate(
+                location: sampleLocation,
+                routePoints: activeRoute?.routePoints ?? [],
+                settings: autoFlyerSettings.pathBacktrack
+            )
+            dropSource = .autoBacktrack
         case .plannedRouteDivergence:
             guard let sampleLocation = location ?? currentLocation else { return }
             evaluation = plannedRouteDivergenceFlyerDetector.evaluate(
@@ -869,13 +880,28 @@ final class LocationManager: NSObject, ObservableObject {
         }
 
         if autoFlyerSettings.isVoiceFeedbackEnabled {
-            VoiceFeedback.handle(evaluation: evaluation)
+            VoiceFeedback.handle(
+                evaluation: evaluation,
+                preferences: autoFlyerSettings.voiceAnnouncements
+            )
         }
 
         guard let result = evaluation.result else { return }
-        guard let dropLocation = location ?? currentLocation else { return }
 
-        recordFlyerDrop(at: dropLocation, source: dropSource, note: result.note)
+        let dropCoordinate: CLLocationCoordinate2D
+        switch autoFlyerSettings.method {
+        case .pathBacktrack:
+            dropCoordinate = result.coordinate
+        case .compassTurnaround, .plannedRouteDivergence:
+            guard let dropLocation = location ?? currentLocation else { return }
+            dropCoordinate = dropLocation.coordinate
+        }
+
+        recordFlyerDrop(
+            at: CLLocation(latitude: dropCoordinate.latitude, longitude: dropCoordinate.longitude),
+            source: dropSource,
+            note: result.note
+        )
     }
 
     private func currentEndCoordinate(for route: RouteRecord) -> CLLocationCoordinate2D? {
@@ -999,7 +1025,7 @@ extension LocationManager: CLLocationManagerDelegate {
                 switch autoFlyerSettings.method {
                 case .compassTurnaround:
                     evaluateAutomaticFlyerCounting()
-                case .plannedRouteDivergence:
+                case .pathBacktrack, .plannedRouteDivergence:
                     break
                 }
             }

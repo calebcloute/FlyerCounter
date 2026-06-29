@@ -4,6 +4,7 @@ import SwiftUI
 
 enum AutoFlyerCountingMethod: String, Codable, CaseIterable, Identifiable {
     case compassTurnaround
+    case pathBacktrack
     case plannedRouteDivergence
 
     var id: String { rawValue }
@@ -11,7 +12,9 @@ enum AutoFlyerCountingMethod: String, Codable, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .compassTurnaround:
-            "Turnaround (compass)"
+            "Turnaround (uses compass only)"
+        case .pathBacktrack:
+            "Backtrack (uses GPS only)"
         case .plannedRouteDivergence:
             "Planned route divergence"
         }
@@ -30,11 +33,28 @@ struct PlannedRouteDetectionSettings: Codable, Equatable {
     var maximumGPSAccuracyMeters: Double = 25
 }
 
+struct PathBacktrackSettings: Codable, Equatable {
+    var overlapRadiusMeters: Double = 4
+    var minBacktrackSeparationMeters: Double = 10
+    var cooldownSeconds: Double = 8
+    var maximumGPSAccuracyMeters: Double = 25
+}
+
+struct VoiceAnnouncementSettings: Codable, Equatable {
+    var speakFlyerCountedTurnaround: Bool = true
+    var speakFlyerCountedBacktrack: Bool = true
+    var speakFlyerCountedPlannedRoute: Bool = true
+    var speakCooldownCountdown: Bool = true
+    var speakEstablishingWait: Bool = true
+}
+
 struct AutoFlyerSettings: Codable, Equatable {
     var isEnabled: Bool = false
     var isVoiceFeedbackEnabled: Bool = false
+    var voiceAnnouncements = VoiceAnnouncementSettings()
     var method: AutoFlyerCountingMethod = .compassTurnaround
     var turnaround = CompassTurnaroundSettings()
+    var pathBacktrack = PathBacktrackSettings()
     var plannedRoute = PlannedRouteDetectionSettings()
 }
 
@@ -125,9 +145,9 @@ struct AutomaticFlyerCountingSection: View {
             Text("Automatic Flyer Counting")
         } footer: {
             Text(
-                "Uses turnaround compass detection or planned-route divergence while a route is recording. " +
-                "Manual +1 and -1 still work. Each auto count gives one vibration in the app, " +
-                "or a notification on the lock screen. Voice announcements work on the lock screen " +
+                "Uses turnaround compass detection, path backtrack overlap, or planned-route divergence " +
+                "while a route is recording. Manual +1 and -1 still work. Each auto count gives one vibration " +
+                "in the app, or a notification on the lock screen. Voice announcements work on the lock screen " +
                 "when Speak testing announcements is on."
             )
             .foregroundStyle(.secondary)
@@ -135,6 +155,10 @@ struct AutomaticFlyerCountingSection: View {
 
         if store.settings.isEnabled {
             Toggle("Speak testing announcements", isOn: $store.settings.isVoiceFeedbackEnabled)
+
+            if store.settings.isVoiceFeedbackEnabled {
+                VoiceAnnouncementSettingsSection(settings: $store.settings.voiceAnnouncements)
+            }
 
             Picker("Counting method", selection: $store.settings.method) {
                 ForEach(AutoFlyerCountingMethod.allCases) { method in
@@ -145,9 +169,71 @@ struct AutomaticFlyerCountingSection: View {
             switch store.settings.method {
             case .compassTurnaround:
                 CompassTurnaroundSettingsSection(settings: $store.settings.turnaround)
+            case .pathBacktrack:
+                PathBacktrackSettingsSection(settings: $store.settings.pathBacktrack)
             case .plannedRouteDivergence:
                 PlannedRouteDetectionSettingsSection(settings: $store.settings.plannedRoute)
             }
+        }
+    }
+}
+
+struct VoiceAnnouncementSettingsSection: View {
+    @Binding var settings: VoiceAnnouncementSettings
+
+    var body: some View {
+        Section {
+            Toggle("Flyer counted (turnaround)", isOn: $settings.speakFlyerCountedTurnaround)
+            Toggle("Flyer counted (backtrack)", isOn: $settings.speakFlyerCountedBacktrack)
+            Toggle("Flyer counted (planned route)", isOn: $settings.speakFlyerCountedPlannedRoute)
+            Toggle("Cooldown countdown", isOn: $settings.speakCooldownCountdown)
+            Toggle("Establishing wait", isOn: $settings.speakEstablishingWait)
+        } header: {
+            Text("Announcements")
+        } footer: {
+            Text(
+                "Choose which spoken cues play while testing auto counting. " +
+                "Establishing wait is the repeated “wait” during the turnaround 2-second lookback."
+            )
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+struct PathBacktrackSettingsSection: View {
+    @Binding var settings: PathBacktrackSettings
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Distance from path line: \(Int(settings.overlapRadiusMeters)) m")
+                Slider(value: $settings.overlapRadiusMeters, in: 2...8, step: 1)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Min path behind furthest point: \(Int(settings.minBacktrackSeparationMeters)) m")
+                Slider(value: $settings.minBacktrackSeparationMeters, in: 6...25, step: 1)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Cooldown: \(Int(settings.cooldownSeconds)) s")
+                Slider(value: $settings.cooldownSeconds, in: 3...30, step: 1)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Max GPS accuracy: \(Int(settings.maximumGPSAccuracyMeters)) m")
+                Slider(value: $settings.maximumGPSAccuracyMeters, in: 10...40, step: 5)
+            }
+        } header: {
+            Text("Path Backtrack")
+        } footer: {
+            Text(
+                "Counts a flyer at the furthest point you reached when your current position is within " +
+                "the overlap radius of any part of your recorded path line — not just the GPS dots. " +
+                "The overlap must be at least \(Int(settings.minBacktrackSeparationMeters)) m back along " +
+                "the path from your furthest point."
+            )
+            .foregroundStyle(.secondary)
         }
     }
 }

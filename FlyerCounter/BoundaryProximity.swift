@@ -48,23 +48,99 @@ enum BoundaryProximity {
         from location: CLLocation,
         toPolyline coordinates: [CLLocationCoordinate2D]
     ) -> CLLocationDistance {
+        locateOnPolyline(from: location, polyline: coordinates)?.distanceFromLocation ?? .infinity
+    }
+
+    struct PolylineLocation {
+        let distanceFromLocation: CLLocationDistance
+        let distanceAlongPolyline: CLLocationDistance
+        let closestCoordinate: CLLocationCoordinate2D
+    }
+
+    static func locateOnPolyline(
+        from location: CLLocation,
+        polyline coordinates: [CLLocationCoordinate2D]
+    ) -> PolylineLocation? {
+        guard let first = coordinates.first else { return nil }
+
         guard coordinates.count >= 2 else {
-            guard let first = coordinates.first else { return .infinity }
-            return location.distance(
-                from: CLLocation(latitude: first.latitude, longitude: first.longitude)
+            let point = CLLocation(latitude: first.latitude, longitude: first.longitude)
+            return PolylineLocation(
+                distanceFromLocation: location.distance(from: point),
+                distanceAlongPolyline: 0,
+                closestCoordinate: first
             )
         }
 
-        var minimum = CLLocationDistance.infinity
+        var bestDistance = CLLocationDistance.infinity
+        var bestAlongPolyline: CLLocationDistance = 0
+        var bestCoordinate = first
+        var traversed: CLLocationDistance = 0
+
         for index in 0..<(coordinates.count - 1) {
-            let segmentDistance = distance(
-                from: location,
-                segmentStart: coordinates[index],
-                segmentEnd: coordinates[index + 1]
-            )
-            minimum = min(minimum, segmentDistance)
+            let start = coordinates[index]
+            let end = coordinates[index + 1]
+            let proximity = segmentProximity(from: location, segmentStart: start, segmentEnd: end)
+
+            if proximity.distance < bestDistance {
+                bestDistance = proximity.distance
+                bestAlongPolyline = traversed + proximity.segmentLength * proximity.projection
+                bestCoordinate = proximity.closestCoordinate
+            }
+
+            traversed += proximity.segmentLength
         }
-        return minimum
+
+        return PolylineLocation(
+            distanceFromLocation: bestDistance,
+            distanceAlongPolyline: bestAlongPolyline,
+            closestCoordinate: bestCoordinate
+        )
+    }
+
+    static func totalPolylineLength(_ coordinates: [CLLocationCoordinate2D]) -> CLLocationDistance {
+        guard coordinates.count >= 2 else { return 0 }
+
+        var total: CLLocationDistance = 0
+        for index in 0..<(coordinates.count - 1) {
+            let start = coordinates[index]
+            let end = coordinates[index + 1]
+            total += CLLocation(latitude: start.latitude, longitude: start.longitude)
+                .distance(from: CLLocation(latitude: end.latitude, longitude: end.longitude))
+        }
+        return total
+    }
+
+    static func coordinateAlongPolyline(
+        atDistance distance: CLLocationDistance,
+        polyline coordinates: [CLLocationCoordinate2D]
+    ) -> CLLocationCoordinate2D? {
+        guard let first = coordinates.first else { return nil }
+        guard coordinates.count >= 2 else { return first }
+
+        let target = max(0, distance)
+        var traversed: CLLocationDistance = 0
+
+        for index in 0..<(coordinates.count - 1) {
+            let start = coordinates[index]
+            let end = coordinates[index + 1]
+            let startLocation = CLLocation(latitude: start.latitude, longitude: start.longitude)
+            let endLocation = CLLocation(latitude: end.latitude, longitude: end.longitude)
+            let segmentLength = startLocation.distance(from: endLocation)
+            guard segmentLength > 0 else { continue }
+
+            if traversed + segmentLength >= target {
+                let remaining = target - traversed
+                let fraction = remaining / segmentLength
+                let latitude = start.latitude + (end.latitude - start.latitude) * fraction
+                let longitude = start.longitude + (end.longitude - start.longitude) * fraction
+                return CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            }
+
+            traversed += segmentLength
+        }
+
+        return coordinates.last
     }
 
     static func nearestDistance(
@@ -130,11 +206,18 @@ enum BoundaryProximity {
         return inside
     }
 
-    private static func distance(
+    private struct SegmentProximity {
+        let distance: CLLocationDistance
+        let projection: Double
+        let segmentLength: CLLocationDistance
+        let closestCoordinate: CLLocationCoordinate2D
+    }
+
+    private static func segmentProximity(
         from location: CLLocation,
         segmentStart: CLLocationCoordinate2D,
         segmentEnd: CLLocationCoordinate2D
-    ) -> CLLocationDistance {
+    ) -> SegmentProximity {
         let start = MKMapPoint(segmentStart)
         let end = MKMapPoint(segmentEnd)
         let point = MKMapPoint(location.coordinate)
@@ -142,9 +225,16 @@ enum BoundaryProximity {
         let deltaX = end.x - start.x
         let deltaY = end.y - start.y
         let lengthSquared = deltaX * deltaX + deltaY * deltaY
+        let segmentLength = sqrt(lengthSquared)
+
         guard lengthSquared > 0 else {
-            return location.distance(
-                from: CLLocation(latitude: segmentStart.latitude, longitude: segmentStart.longitude)
+            return SegmentProximity(
+                distance: location.distance(
+                    from: CLLocation(latitude: segmentStart.latitude, longitude: segmentStart.longitude)
+                ),
+                projection: 0,
+                segmentLength: 0,
+                closestCoordinate: segmentStart
             )
         }
 
@@ -154,8 +244,23 @@ enum BoundaryProximity {
         )
         let closest = MKMapPoint(x: start.x + projection * deltaX, y: start.y + projection * deltaY)
         let closestCoordinate = closest.coordinate
-        return location.distance(
+        let distance = location.distance(
             from: CLLocation(latitude: closestCoordinate.latitude, longitude: closestCoordinate.longitude)
         )
+
+        return SegmentProximity(
+            distance: distance,
+            projection: projection,
+            segmentLength: segmentLength,
+            closestCoordinate: closestCoordinate
+        )
+    }
+
+    private static func distance(
+        from location: CLLocation,
+        segmentStart: CLLocationCoordinate2D,
+        segmentEnd: CLLocationCoordinate2D
+    ) -> CLLocationDistance {
+        segmentProximity(from: location, segmentStart: segmentStart, segmentEnd: segmentEnd).distance
     }
 }

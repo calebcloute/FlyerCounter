@@ -9,6 +9,7 @@ enum VoiceFeedback {
     private static var establishingWaitTimer: Timer?
     private static var lastEstablishingWaitSpeakDate: Date?
     private static var isAnnouncingFlyerCount = false
+    private static var announcementPreferences = VoiceAnnouncementSettings()
     private static let establishingWaitInterval: TimeInterval = 0.6
 
     static func prepare() {
@@ -25,10 +26,24 @@ enum VoiceFeedback {
         stopEstablishingWaitLoop()
     }
 
-    static func handle(evaluation: AutoFlyerEvaluation) {
+    static func handle(
+        evaluation: AutoFlyerEvaluation,
+        preferences: VoiceAnnouncementSettings
+    ) {
+        announcementPreferences = preferences
+
+        if evaluation.countedBacktrackOverlap == true {
+            stopEstablishingWaitLoop()
+            lastSpokenCooldownSecond = nil
+            guard preferences.speakFlyerCountedBacktrack else { return }
+            speakFlyerCountedBacktrack()
+            return
+        }
+
         if let meters = evaluation.countedMetersFromPlan {
             stopEstablishingWaitLoop()
             lastSpokenCooldownSecond = nil
+            guard preferences.speakFlyerCountedPlannedRoute else { return }
             speakFlyerCountedFromPlan(meters: meters)
             return
         }
@@ -36,6 +51,7 @@ enum VoiceFeedback {
         if let degrees = evaluation.countedTurnDeltaDegrees {
             stopEstablishingWaitLoop()
             lastSpokenCooldownSecond = nil
+            guard preferences.speakFlyerCountedTurnaround else { return }
             speakFlyerCounted(degrees: degrees)
             return
         }
@@ -43,6 +59,7 @@ enum VoiceFeedback {
         if let remaining = evaluation.cooldownRemainingSeconds {
             stopEstablishingWaitLoop()
             if isAnnouncingFlyerCount { return }
+            guard preferences.speakCooldownCountdown else { return }
 
             guard remaining != lastSpokenCooldownSecond else { return }
 
@@ -52,6 +69,10 @@ enum VoiceFeedback {
         }
 
         if evaluation.isEstablishingLookback {
+            guard preferences.speakEstablishingWait else {
+                stopEstablishingWaitLoop()
+                return
+            }
             guard !isAnnouncingFlyerCount else { return }
 
             speakEstablishingWaitBurstIfDue()
@@ -68,6 +89,10 @@ enum VoiceFeedback {
 
     private static func speakFlyerCountedFromPlan(meters: Int) {
         speakFlyerAnnouncement("Flyer counted \(meters) meters from plan")
+    }
+
+    private static func speakFlyerCountedBacktrack() {
+        speakFlyerAnnouncement("Flyer counted at backtrack")
     }
 
     private static func speakFlyerAnnouncement(_ text: String) {
@@ -106,6 +131,7 @@ enum VoiceFeedback {
             repeats: true
         ) { _ in
             Task { @MainActor in
+                guard announcementPreferences.speakEstablishingWait else { return }
                 guard !isAnnouncingFlyerCount else { return }
                 speakEstablishingWaitBurstIfDue()
             }

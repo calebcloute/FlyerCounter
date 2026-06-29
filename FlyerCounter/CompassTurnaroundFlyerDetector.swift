@@ -11,6 +11,7 @@ struct AutoFlyerEvaluation {
     let statusMessage: String
     let countedTurnDeltaDegrees: Int?
     let countedMetersFromPlan: Int?
+    let countedBacktrackOverlap: Bool?
     let cooldownRemainingSeconds: Int?
     let isEstablishingLookback: Bool
 
@@ -19,6 +20,7 @@ struct AutoFlyerEvaluation {
         statusMessage: String,
         countedTurnDeltaDegrees: Int? = nil,
         countedMetersFromPlan: Int? = nil,
+        countedBacktrackOverlap: Bool? = nil,
         cooldownRemainingSeconds: Int? = nil,
         isEstablishingLookback: Bool = false
     ) {
@@ -26,6 +28,7 @@ struct AutoFlyerEvaluation {
         self.statusMessage = statusMessage
         self.countedTurnDeltaDegrees = countedTurnDeltaDegrees
         self.countedMetersFromPlan = countedMetersFromPlan
+        self.countedBacktrackOverlap = countedBacktrackOverlap
         self.cooldownRemainingSeconds = cooldownRemainingSeconds
         self.isEstablishingLookback = isEstablishingLookback
     }
