@@ -7,7 +7,7 @@ enum VoiceFeedback {
     private static var lastSpokenCooldownSecond: Int?
     private static var establishingWaitTimer: Timer?
     private static var lastEstablishingWaitSpeakDate: Date?
-    private static let establishingWaitInterval: TimeInterval = 1.0
+    private static let establishingWaitInterval: TimeInterval = 0.6
 
     static func prepare() {
         configureAudioSession()
@@ -86,7 +86,7 @@ enum VoiceFeedback {
 
         let utterance = AVSpeechUtterance(string: "wait")
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.3
         synthesizer.speak(utterance)
     }
 
