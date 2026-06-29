@@ -485,7 +485,7 @@ struct RouteTrackingView: View {
 
                 Text(
                     locationManager.autoFlyerDetectionStatus
-                        ?? "Live compass vs last 2 s tick — watching for sharp turnarounds."
+                        ?? "Live compass vs 2 s ago — watching for sharp turnarounds."
                 )
                     .id(locationManager.autoFlyerStatusUpdatedAt)
                     .font(.caption)

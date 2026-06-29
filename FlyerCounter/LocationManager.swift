@@ -17,7 +17,6 @@ final class LocationManager: NSObject, ObservableObject {
     @Published private(set) var lastAutoFlyerDetectionDate: Date?
     @Published private(set) var autoFlyerDetectionStatus: String?
     @Published private(set) var autoFlyerStatusUpdatedAt: Date?
-    @Published private(set) var autoFlyerRecentTickAt: Date?
     @Published private(set) var liveRouteStats: RouteLiveStats = .idle
     @Published private(set) var savedRouteAnalytics: [RouteSessionSnapshot] = []
 
@@ -637,17 +636,17 @@ final class LocationManager: NSObject, ObservableObject {
               CLLocationManager.headingAvailable() else {
             manager.stopUpdatingHeading()
             currentDeviceHeading = nil
-            refreshAutoFlyerSamplingTimer()
+            refreshAutoFlyerMonitoring()
             return
         }
 
         manager.headingFilter = kCLHeadingFilterNone
         manager.headingOrientation = .portrait
         manager.startUpdatingHeading()
-        refreshAutoFlyerSamplingTimer()
+        refreshAutoFlyerMonitoring()
     }
 
-    private func refreshAutoFlyerSamplingTimer() {
+    private func refreshAutoFlyerMonitoring() {
         autoFlyerSampleTimer?.invalidate()
         autoFlyerSampleTimer = nil
 
@@ -657,43 +656,24 @@ final class LocationManager: NSObject, ObservableObject {
               CLLocationManager.headingAvailable() else {
             autoFlyerDetectionStatus = nil
             autoFlyerStatusUpdatedAt = nil
-            autoFlyerRecentTickAt = nil
             return
         }
 
-        let interval = CompassTurnaroundFlyerDetector.sampleIntervalSeconds
         compassTurnaroundFlyerDetector.reset()
 
-        let startedAt = Date()
-        if let heading = latestSampledDeviceHeading() {
-            compassTurnaroundFlyerDetector.seedInitialTick(heading)
-            autoFlyerRecentTickAt = startedAt
-        }
-
+        let interval = CompassTurnaroundFlyerDetector.historyRefreshIntervalSeconds
         let timer = Timer(
-            fire: startedAt.addingTimeInterval(interval),
+            fire: Date().addingTimeInterval(interval),
             interval: interval,
             repeats: true
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.advanceAutoFlyerRecentTick()
+                self?.evaluateAutomaticFlyerCounting()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
         autoFlyerSampleTimer = timer
 
-        evaluateAutomaticFlyerCounting()
-    }
-
-    private func advanceAutoFlyerRecentTick() {
-        guard isTracking,
-              isViewingActiveRoute,
-              autoFlyerSettings.isEnabled else { return }
-
-        guard let heading = latestSampledDeviceHeading() else { return }
-
-        compassTurnaroundFlyerDetector.advanceTick(to: heading)
-        autoFlyerRecentTickAt = Date()
         evaluateAutomaticFlyerCounting()
     }
 

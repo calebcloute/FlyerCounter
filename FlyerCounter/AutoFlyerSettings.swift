@@ -81,8 +81,8 @@ struct CompassTurnaroundSettingsSection: View {
         } footer: {
             Text(
                 "Counts a flyer when live compass heading exceeds the turn threshold compared to " +
-                "the last 2-second tick. Facing updates continuously; recent updates only on each tick. " +
-                "Hold the phone upright in portrait with the top facing the direction you walk for best results."
+                "where you were facing exactly 2 seconds ago. Both facing and recent roll forward " +
+                "continuously with time. Hold the phone upright in portrait for best results."
             )
             .foregroundStyle(.secondary)
         }

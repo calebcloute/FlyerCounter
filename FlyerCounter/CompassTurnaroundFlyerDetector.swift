@@ -12,28 +12,27 @@ struct AutoFlyerEvaluation {
 }
 
 struct CompassTurnaroundFlyerDetector {
-    static let sampleIntervalSeconds: TimeInterval = 2
+    /// How far back in time `recent` is measured from the present moment.
+    static let comparisonLookbackSeconds: TimeInterval = 2
+    /// Re-evaluate on this interval so the rolling window advances even when the compass is still.
+    static let historyRefreshIntervalSeconds: TimeInterval = 1
 
-    /// Heading captured at the most recent 2-second tick boundary. Updates only on ticks.
-    private(set) var lastTickHeading: Double?
+    private struct HeadingSample {
+        let date: Date
+        let heading: Double
+    }
+
+    private var headingHistory: [HeadingSample] = []
     private var lastAutoCountDate: Date?
 
+    private let historyRetentionSeconds: TimeInterval = 15
+
     mutating func reset() {
-        lastTickHeading = nil
+        headingHistory = []
         lastAutoCountDate = nil
     }
 
-    /// Seeds the T=0 tick when recording starts.
-    mutating func seedInitialTick(_ heading: Double) {
-        lastTickHeading = heading
-    }
-
-    /// Advances `recent` to a new fixed tick snapshot.
-    mutating func advanceTick(to heading: Double) {
-        lastTickHeading = heading
-    }
-
-    /// Compares live compass heading against the last tick (`recent`). Called on every heading update.
+    /// Compares live heading to the heading from exactly `comparisonLookbackSeconds` ago.
     mutating func evaluateLive(
         deviceHeading: Double?,
         settings: CompassTurnaroundSettings,
@@ -43,10 +42,12 @@ struct CompassTurnaroundFlyerDetector {
             return AutoFlyerEvaluation(result: nil, statusMessage: "Waiting for compass")
         }
 
-        guard let recent = lastTickHeading else {
+        recordSample(heading: facing, at: now)
+
+        guard let recent = headingAtLookback(from: now) else {
             return AutoFlyerEvaluation(
                 result: nil,
-                statusMessage: "Facing \(Int(facing))° · waiting for first tick…"
+                statusMessage: "Facing \(Int(facing))° · establishing 2 s lookback…"
             )
         }
 
@@ -75,6 +76,28 @@ struct CompassTurnaroundFlyerDetector {
             ),
             statusMessage: "Counted · turnaround Δ\(Int(turnaroundDelta))°"
         )
+    }
+
+    private mutating func recordSample(heading: Double, at date: Date) {
+        pruneHistory(now: date)
+        headingHistory.append(HeadingSample(date: date, heading: heading))
+    }
+
+    private mutating func pruneHistory(now: Date) {
+        let cutoff = now.addingTimeInterval(-historyRetentionSeconds)
+        headingHistory.removeAll { $0.date < cutoff }
+    }
+
+    private func headingAtLookback(from now: Date) -> Double? {
+        let target = now.addingTimeInterval(-Self.comparisonLookbackSeconds)
+        let eligibleSamples = headingHistory.filter { $0.date <= target }
+        guard let closest = eligibleSamples.min(by: {
+            target.timeIntervalSince($0.date) < target.timeIntervalSince($1.date)
+        }) else {
+            return nil
+        }
+
+        return closest.heading
     }
 
     private func bearingDifference(_ lhs: Double, _ rhs: Double) -> Double {
