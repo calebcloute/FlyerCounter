@@ -4,17 +4,24 @@ import Foundation
 @MainActor
 enum VoiceFeedback {
     private static let synthesizer = AVSpeechSynthesizer()
+    private static let speechDelegate = VoiceSpeechDelegate()
     private static var lastSpokenCooldownSecond: Int?
     private static var establishingWaitTimer: Timer?
     private static var lastEstablishingWaitSpeakDate: Date?
+    private static var isAnnouncingFlyerCount = false
     private static let establishingWaitInterval: TimeInterval = 0.6
 
     static func prepare() {
+        speechDelegate.onFlyerAnnouncementFinished = {
+            isAnnouncingFlyerCount = false
+        }
+        synthesizer.delegate = speechDelegate
         configureAudioSession()
     }
 
     static func resetCooldownTracking() {
         lastSpokenCooldownSecond = nil
+        isAnnouncingFlyerCount = false
         stopEstablishingWaitLoop()
     }
 
@@ -22,26 +29,57 @@ enum VoiceFeedback {
         if let degrees = evaluation.countedTurnDeltaDegrees {
             stopEstablishingWaitLoop()
             lastSpokenCooldownSecond = nil
-            speak("Flyer counted \(degrees) degrees")
+            speakFlyerCounted(degrees: degrees)
             return
         }
 
         if let remaining = evaluation.cooldownRemainingSeconds {
             stopEstablishingWaitLoop()
+            if isAnnouncingFlyerCount { return }
+
             guard remaining != lastSpokenCooldownSecond else { return }
 
             lastSpokenCooldownSecond = remaining
-            speak("\(remaining)")
+            speakCooldown(remaining)
             return
         }
 
         if evaluation.isEstablishingLookback {
+            guard !isAnnouncingFlyerCount else { return }
+
             speakEstablishingWaitBurstIfDue()
             startEstablishingWaitLoopIfNeeded()
             return
         }
 
         stopEstablishingWaitLoop()
+    }
+
+    private static func speakFlyerCounted(degrees: Int) {
+        configureAudioSession()
+        isAnnouncingFlyerCount = true
+
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: "Flyer counted \(degrees) degrees")
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.speak(utterance)
+    }
+
+    private static func speakCooldown(_ remaining: Int) {
+        configureAudioSession()
+
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+
+        let utterance = AVSpeechUtterance(string: "\(remaining)")
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.speak(utterance)
     }
 
     private static func startEstablishingWaitLoopIfNeeded() {
@@ -53,6 +91,7 @@ enum VoiceFeedback {
             repeats: true
         ) { _ in
             Task { @MainActor in
+                guard !isAnnouncingFlyerCount else { return }
                 speakEstablishingWaitBurstIfDue()
             }
         }
@@ -99,17 +138,25 @@ enum VoiceFeedback {
             // Speech may still work in the foreground without a configured session.
         }
     }
+}
 
-    private static func speak(_ text: String) {
-        configureAudioSession()
+@MainActor
+private final class VoiceSpeechDelegate: NSObject, AVSpeechSynthesizerDelegate {
+    var onFlyerAnnouncementFinished: (() -> Void)?
 
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        finishFlyerAnnouncementIfNeeded(utterance)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        finishFlyerAnnouncementIfNeeded(utterance)
+    }
+
+    private nonisolated func finishFlyerAnnouncementIfNeeded(_ utterance: AVSpeechUtterance) {
+        guard utterance.speechString.hasPrefix("Flyer counted") else { return }
+
+        Task { @MainActor in
+            onFlyerAnnouncementFinished?()
         }
-
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        synthesizer.speak(utterance)
     }
 }
