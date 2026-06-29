@@ -71,7 +71,7 @@ struct ContentView: View {
                 locationManager.prepareForUse()
                 syncActiveBoundaryOverlay()
                 showRouteTrackingForPausedNamingIfNeeded()
-            case .background:
+            case .inactive, .background:
                 locationManager.refreshBackgroundRecordingIfNeeded()
             default:
                 break

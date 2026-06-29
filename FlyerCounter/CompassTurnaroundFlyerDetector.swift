@@ -25,7 +25,7 @@ struct CompassTurnaroundFlyerDetector {
     private var headingHistory: [HeadingSample] = []
     private var lastAutoCountDate: Date?
 
-    private let historyRetentionSeconds: TimeInterval = 15
+    private let historyRetentionSeconds: TimeInterval = 60
 
     mutating func reset() {
         headingHistory = []
