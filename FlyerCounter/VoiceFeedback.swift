@@ -5,12 +5,12 @@ import Foundation
 enum VoiceFeedback {
     private static let synthesizer = AVSpeechSynthesizer()
     private static let speechDelegate = VoiceSpeechDelegate()
-    private static var lastSpokenCooldownSecond: Int?
-    private static var establishingWaitTimer: Timer?
-    private static var lastEstablishingWaitSpeakDate: Date?
+    private static var lastQueuedCooldownSecond: Int?
+    private static var lastEstablishingQueueDate: Date?
     private static var isAnnouncingFlyerCount = false
     private static var announcementPreferences = VoiceAnnouncementSettings()
     private static let establishingWaitInterval: TimeInterval = 0.6
+    private static let cooldownUtteranceDelay: TimeInterval = 0.85
 
     static func prepare() {
         speechDelegate.onFlyerAnnouncementFinished = {
@@ -21,9 +21,14 @@ enum VoiceFeedback {
     }
 
     static func resetCooldownTracking() {
-        lastSpokenCooldownSecond = nil
+        lastQueuedCooldownSecond = nil
         isAnnouncingFlyerCount = false
-        stopEstablishingWaitLoop()
+        lastEstablishingQueueDate = nil
+        synthesizer.stopSpeaking(at: .immediate)
+    }
+
+    static func prepareForBackgroundPlayback() {
+        configureAudioSession()
     }
 
     static func handle(
@@ -33,54 +38,50 @@ enum VoiceFeedback {
         announcementPreferences = preferences
 
         if evaluation.countedBacktrackOverlap == true {
-            stopEstablishingWaitLoop()
-            lastSpokenCooldownSecond = nil
+            lastQueuedCooldownSecond = nil
+            lastEstablishingQueueDate = nil
             guard preferences.speakFlyerCountedBacktrack else { return }
             speakFlyerCountedBacktrack()
             return
         }
 
         if let meters = evaluation.countedMetersFromPlan {
-            stopEstablishingWaitLoop()
-            lastSpokenCooldownSecond = nil
+            lastQueuedCooldownSecond = nil
+            lastEstablishingQueueDate = nil
             guard preferences.speakFlyerCountedPlannedRoute else { return }
             speakFlyerCountedFromPlan(meters: meters)
             return
         }
 
         if let degrees = evaluation.countedTurnDeltaDegrees {
-            stopEstablishingWaitLoop()
-            lastSpokenCooldownSecond = nil
+            lastQueuedCooldownSecond = nil
+            lastEstablishingQueueDate = nil
             guard preferences.speakFlyerCountedTurnaround else { return }
             speakFlyerCounted(degrees: degrees)
             return
         }
 
         if let remaining = evaluation.cooldownRemainingSeconds {
-            stopEstablishingWaitLoop()
             if isAnnouncingFlyerCount { return }
             guard preferences.speakCooldownCountdown else { return }
 
-            guard remaining != lastSpokenCooldownSecond else { return }
+            guard lastQueuedCooldownSecond == nil else { return }
 
-            lastSpokenCooldownSecond = remaining
-            speakCooldown(remaining)
+            lastQueuedCooldownSecond = remaining
+            lastEstablishingQueueDate = nil
+            speakCooldownSequence(from: remaining)
             return
         }
 
         if evaluation.isEstablishingLookback {
-            guard preferences.speakEstablishingWait else {
-                stopEstablishingWaitLoop()
-                return
-            }
+            guard preferences.speakEstablishingWait else { return }
             guard !isAnnouncingFlyerCount else { return }
 
-            speakEstablishingWaitBurstIfDue()
-            startEstablishingWaitLoopIfNeeded()
+            queueEstablishingWaitsIfNeeded()
             return
         }
 
-        stopEstablishingWaitLoop()
+        lastEstablishingQueueDate = nil
     }
 
     private static func speakFlyerCounted(degrees: Int) {
@@ -109,72 +110,61 @@ enum VoiceFeedback {
         synthesizer.speak(utterance)
     }
 
-    private static func speakCooldown(_ remaining: Int) {
+    private static func speakCooldownSequence(from remaining: Int) {
         configureAudioSession()
 
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
 
-        let utterance = AVSpeechUtterance(string: "\(remaining)")
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-        synthesizer.speak(utterance)
-    }
+        guard remaining >= 1 else { return }
 
-    private static func startEstablishingWaitLoopIfNeeded() {
-        guard establishingWaitTimer == nil else { return }
-
-        let timer = Timer(
-            fire: Date().addingTimeInterval(establishingWaitInterval),
-            interval: establishingWaitInterval,
-            repeats: true
-        ) { _ in
-            Task { @MainActor in
-                guard announcementPreferences.speakEstablishingWait else { return }
-                guard !isAnnouncingFlyerCount else { return }
-                speakEstablishingWaitBurstIfDue()
+        for second in stride(from: remaining, through: 1, by: -1) {
+            let utterance = AVSpeechUtterance(string: "\(second)")
+            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+            if second != remaining {
+                utterance.preUtteranceDelay = cooldownUtteranceDelay
             }
+            synthesizer.speak(utterance)
         }
-        RunLoop.main.add(timer, forMode: .common)
-        establishingWaitTimer = timer
     }
 
-    private static func stopEstablishingWaitLoop() {
-        establishingWaitTimer?.invalidate()
-        establishingWaitTimer = nil
-        lastEstablishingWaitSpeakDate = nil
-    }
-
-    private static func speakEstablishingWaitBurstIfDue() {
+    private static func queueEstablishingWaitsIfNeeded() {
         let now = Date()
-        if let lastEstablishingWaitSpeakDate,
-           now.timeIntervalSince(lastEstablishingWaitSpeakDate) < establishingWaitInterval {
+        if let lastEstablishingQueueDate,
+           now.timeIntervalSince(lastEstablishingQueueDate) < establishingWaitInterval {
             return
         }
 
-        lastEstablishingWaitSpeakDate = now
-        speakEstablishingWaitBurst()
-    }
-
-    private static func speakEstablishingWaitBurst() {
+        lastEstablishingQueueDate = now
         configureAudioSession()
 
         if synthesizer.isSpeaking {
             synthesizer.stopSpeaking(at: .immediate)
         }
 
-        let utterance = AVSpeechUtterance(string: "wait")
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.3
-        synthesizer.speak(utterance)
+        let burstCount = 4
+        for index in 0..<burstCount {
+            let utterance = AVSpeechUtterance(string: "wait")
+            utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.3
+            if index > 0 {
+                utterance.preUtteranceDelay = establishingWaitInterval
+            }
+            synthesizer.speak(utterance)
+        }
     }
 
     private static func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers, .mixWithOthers])
-            try session.setActive(true)
+            try session.setCategory(
+                .playback,
+                mode: .spokenAudio,
+                options: [.duckOthers, .mixWithOthers, .interruptSpokenAudioAndMixWithOthers]
+            )
+            try session.setActive(true, options: [])
         } catch {
             // Speech may still work in the foreground without a configured session.
         }

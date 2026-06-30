@@ -85,12 +85,12 @@ struct ContentView: View {
             case .active:
                 locationManager.updateAutoFlyerSettings(autoFlyerSettingsStore.settings)
                 locationManager.updateBoundaryAlertSettings(boundaryAlertSettingsStore.settings)
-                locationManager.prepareForUse()
+                locationManager.prepareForForegroundReturn()
                 syncActiveBoundaryOverlay()
                 syncActivePlannedRoute()
                 showRouteTrackingForPausedNamingIfNeeded()
             case .inactive, .background:
-                locationManager.refreshBackgroundRecordingIfNeeded()
+                locationManager.prepareForBackground()
             default:
                 break
             }

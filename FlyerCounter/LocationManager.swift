@@ -37,7 +37,7 @@ final class LocationManager: NSObject, ObservableObject {
     private var compassTurnaroundFlyerDetector = CompassTurnaroundFlyerDetector()
     private var plannedRouteDivergenceFlyerDetector = PlannedRouteDivergenceFlyerDetector()
     private var pathBacktrackFlyerDetector = PathBacktrackFlyerDetector()
-    private var autoFlyerSampleTimer: Timer?
+    private var autoFlyerEvaluationTask: Task<Void, Never>?
     private var backgroundActivitySession: CLBackgroundActivitySession?
     private var currentDeviceHeading: CLLocationDirection?
     private var lastTravelHeadingLocation: CLLocation?
@@ -166,6 +166,82 @@ final class LocationManager: NSObject, ObservableObject {
         guard shouldMonitorLocation else { return }
         manager.startUpdatingLocation()
         refreshBackgroundAutoFlyerHeadingIfNeeded()
+    }
+
+    func prepareForBackground() {
+        guard isTracking else { return }
+        RouteStorage.setWasBackgroundedWhileRecording(true)
+        activateBackgroundRecordingSupport()
+        persistArchive()
+        refreshBackgroundRecordingIfNeeded()
+        VoiceFeedback.prepareForBackgroundPlayback()
+        startAutoFlyerEvaluationLoopIfNeeded()
+    }
+
+    func prepareForForegroundReturn() {
+        RouteStorage.setWasBackgroundedWhileRecording(false)
+        refreshAuthorizationStatus()
+        updateStatusMessage()
+        refreshPausedRouteNamingRequirement()
+
+        guard isLocationAuthorized else { return }
+
+        if isTracking {
+            activateBackgroundRecordingSupport()
+            startLocationUpdatesIfNeeded()
+            refreshHeadingUpdatesIfNeeded()
+            startAutoFlyerEvaluationLoopIfNeeded()
+        } else {
+            startLocationUpdatesIfNeeded()
+        }
+    }
+
+    private func activateBackgroundRecordingSupport() {
+        guard isTracking, hasBackgroundLocationAuthorization, hasLocationBackgroundMode else { return }
+        configureBackgroundLocationIfNeeded()
+        if backgroundActivitySession == nil {
+            backgroundActivitySession = CLBackgroundActivitySession()
+        }
+    }
+
+    private func startAutoFlyerEvaluationLoopIfNeeded() {
+        guard isTracking,
+              autoFlyerSettings.isEnabled,
+              autoFlyerSettings.method == .compassTurnaround,
+              CLLocationManager.headingAvailable() else {
+            stopAutoFlyerEvaluationLoop()
+            return
+        }
+
+        if autoFlyerEvaluationTask != nil {
+            evaluateAutomaticFlyerCounting()
+            return
+        }
+
+        let interval = CompassTurnaroundFlyerDetector.historyRefreshIntervalSeconds
+        autoFlyerEvaluationTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            while !Task.isCancelled {
+                guard isTracking,
+                      autoFlyerSettings.isEnabled,
+                      autoFlyerSettings.method == .compassTurnaround else {
+                    break
+                }
+
+                evaluateAutomaticFlyerCounting()
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            }
+
+            autoFlyerEvaluationTask = nil
+        }
+
+        evaluateAutomaticFlyerCounting()
+    }
+
+    private func stopAutoFlyerEvaluationLoop() {
+        autoFlyerEvaluationTask?.cancel()
+        autoFlyerEvaluationTask = nil
     }
 
     private func refreshBackgroundAutoFlyerHeadingIfNeeded() {
@@ -384,6 +460,9 @@ final class LocationManager: NSObject, ObservableObject {
         let trimmedHighlighterColor = highlighterColor?.trimmingCharacters(in: .whitespacesAndNewlines)
 
         isTracking = false
+        stopAutoFlyerEvaluationLoop()
+        backgroundActivitySession?.invalidate()
+        backgroundActivitySession = nil
         updateActiveRoute { route in
             if let endCoordinate = currentEndCoordinate(for: route) {
                 route.appendEndSegmentMarker(at: endCoordinate)
@@ -496,6 +575,7 @@ final class LocationManager: NSObject, ObservableObject {
         liveRouteStats = .idle
         startLocationUpdatesIfNeeded()
         refreshHeadingUpdatesIfNeeded()
+        activateBackgroundRecordingSupport()
         persistArchive()
     }
 
@@ -529,6 +609,7 @@ final class LocationManager: NSObject, ObservableObject {
         VoiceFeedback.resetCooldownTracking()
         startLocationUpdatesIfNeeded()
         refreshHeadingUpdatesIfNeeded()
+        activateBackgroundRecordingSupport()
         persistArchive()
     }
 
@@ -683,8 +764,7 @@ final class LocationManager: NSObject, ObservableObject {
             && CLLocationManager.headingAvailable()
 
         guard shouldDetect else {
-            autoFlyerSampleTimer?.invalidate()
-            autoFlyerSampleTimer = nil
+            stopAutoFlyerEvaluationLoop()
             if !isTracking || !autoFlyerSettings.isEnabled {
                 autoFlyerDetectionStatus = nil
                 autoFlyerStatusUpdatedAt = nil
@@ -692,25 +772,7 @@ final class LocationManager: NSObject, ObservableObject {
             return
         }
 
-        if autoFlyerSampleTimer != nil {
-            evaluateAutomaticFlyerCounting()
-            return
-        }
-
-        let interval = CompassTurnaroundFlyerDetector.historyRefreshIntervalSeconds
-        let timer = Timer(
-            fire: Date().addingTimeInterval(interval),
-            interval: interval,
-            repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.evaluateAutomaticFlyerCounting()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        autoFlyerSampleTimer = timer
-
-        evaluateAutomaticFlyerCounting()
+        startAutoFlyerEvaluationLoopIfNeeded()
     }
 
     private func refreshLatestDeviceHeadingFromManager() {
@@ -1042,6 +1104,9 @@ extension LocationManager: CLLocationManagerDelegate {
                 pendingStart = false
                 pendingNewRoute = false
                 isTracking = false
+                stopAutoFlyerEvaluationLoop()
+                backgroundActivitySession?.invalidate()
+                backgroundActivitySession = nil
                 persistArchive()
                 updateStatusMessage()
             case .locationUnknown:

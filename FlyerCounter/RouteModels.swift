@@ -325,6 +325,17 @@ struct LegacySavedRoute: Codable {
 enum RouteStorage {
     private static let archiveKey = "routeArchive"
     private static let legacyKey = "savedRoute"
+    private static let wasBackgroundedWhileRecordingKey = "wasBackgroundedWhileRecording"
+
+    static func setWasBackgroundedWhileRecording(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: wasBackgroundedWhileRecordingKey)
+    }
+
+    static func consumeWasBackgroundedWhileRecording() -> Bool {
+        let value = UserDefaults.standard.bool(forKey: wasBackgroundedWhileRecordingKey)
+        UserDefaults.standard.set(false, forKey: wasBackgroundedWhileRecordingKey)
+        return value
+    }
 
     static func loadArchive() -> RouteArchive? {
         guard let data = UserDefaults.standard.data(forKey: archiveKey) else { return nil }
