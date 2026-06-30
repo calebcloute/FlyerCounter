@@ -152,10 +152,6 @@ final class LocationManager: NSObject, ObservableObject {
         authorizationStatus == .denied || authorizationStatus == .restricted
     }
 
-    var canRecordFlyerDrop: Bool {
-        isTracking && isViewingActiveRoute && currentLocation != nil
-    }
-
     var canRemoveLastFlyerDrop: Bool {
         isTracking && isViewingActiveRoute && flyerCount > 0
     }
@@ -490,11 +486,6 @@ final class LocationManager: NSObject, ObservableObject {
             guard let existingName = route.trimmedName else { return false }
             return existingName.compare(trimmedName, options: .caseInsensitive) == .orderedSame
         }
-    }
-
-    func recordFlyerDrop() {
-        guard let location = currentLocation else { return }
-        recordFlyerDrop(at: location, source: .manual)
     }
 
     private func recordFlyerDrop(at location: CLLocation, source: FlyerDropSource, note: String? = nil) {

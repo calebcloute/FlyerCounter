@@ -146,7 +146,7 @@ struct AutomaticFlyerCountingSection: View {
         } footer: {
             Text(
                 "Uses turnaround compass detection, path backtrack overlap, or planned-route divergence " +
-                "while a route is recording. Manual +1 and -1 still work. Each auto count gives one vibration " +
+                "while a route is recording. Use -1 Flyer to undo a mistaken auto count. Each auto count gives one vibration " +
                 "in the app, or a notification on the lock screen. Voice announcements work on the lock screen " +
                 "when Speak testing announcements is on."
             )

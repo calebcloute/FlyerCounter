@@ -394,19 +394,6 @@ struct RouteTrackingView: View {
                 statsRow
 
                 Button {
-                    locationManager.recordFlyerDrop()
-                    haptic(.medium)
-                } label: {
-                    Text("+1 Flyer")
-                        .font(.title)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 120)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!locationManager.canRecordFlyerDrop)
-
-                Button {
                     locationManager.removeLastFlyerDrop()
                     haptic(.light)
                 } label: {
@@ -414,8 +401,9 @@ struct RouteTrackingView: View {
                         .font(.subheadline)
                         .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
+                        .frame(height: 56)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.borderedProminent)
                 .disabled(!locationManager.canRemoveLastFlyerDrop)
 
                 Button("End Route", role: .destructive) {
