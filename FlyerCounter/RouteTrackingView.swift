@@ -467,34 +467,32 @@ struct RouteTrackingView: View {
 
     @ViewBuilder
     private var autoFlyerCountingStatus: some View {
-        if autoFlyerSettingsStore.settings.isEnabled {
-            VStack(spacing: 4) {
-                Label(
-                    autoFlyerMethodLabel,
-                    systemImage: autoFlyerMethodIcon
-                )
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.blue)
+        VStack(spacing: 4) {
+            Label(
+                autoFlyerMethodLabel,
+                systemImage: autoFlyerMethodIcon
+            )
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.blue)
 
-                Text(
-                    locationManager.autoFlyerDetectionStatus
-                        ?? autoFlyerDefaultStatusMessage
-                )
-                    .id(locationManager.autoFlyerStatusUpdatedAt)
-                    .font(.caption)
+            Text(
+                locationManager.autoFlyerDetectionStatus
+                    ?? autoFlyerDefaultStatusMessage
+            )
+                .id(locationManager.autoFlyerStatusUpdatedAt)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            if let message = locationManager.lastAutoFlyerDetectionMessage,
+               let date = locationManager.lastAutoFlyerDetectionDate {
+                Text("Last auto count · \(message) · \(autoCountRelativeDate(date))")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-
-                if let message = locationManager.lastAutoFlyerDetectionMessage,
-                   let date = locationManager.lastAutoFlyerDetectionDate {
-                    Text("Last auto count · \(message) · \(autoCountRelativeDate(date))")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
             }
-            .frame(maxWidth: .infinity)
         }
+        .frame(maxWidth: .infinity)
     }
 
     private var autoFlyerMethodLabel: String {

@@ -14,6 +14,7 @@ struct ContentView: View {
     @StateObject private var areaBoundariesStore = AreaBoundariesStore()
     @StateObject private var plannedRouteStore = PlannedRouteStore()
     @StateObject private var autoFlyerSettingsStore = AutoFlyerSettingsStore()
+    @StateObject private var settingsLockStore = SettingsLockStore()
     @StateObject private var boundaryAlertSettingsStore = BoundaryAlertSettingsStore()
 
     @AppStorage("selectedTab") private var selectedTab = AppTab.routeTracking.rawValue
@@ -55,9 +56,11 @@ struct ContentView: View {
         .environmentObject(areaBoundariesStore)
         .environmentObject(plannedRouteStore)
         .environmentObject(autoFlyerSettingsStore)
+        .environmentObject(settingsLockStore)
         .environmentObject(boundaryAlertSettingsStore)
         .onAppear {
             migrateSelectedTabIfNeeded()
+            autoFlyerSettingsStore.bind(settingsLockStore: settingsLockStore)
             locationManager.updateAutoFlyerSettings(autoFlyerSettingsStore.settings)
             locationManager.updateBoundaryAlertSettings(boundaryAlertSettingsStore.settings)
             locationManager.prepareForUse()

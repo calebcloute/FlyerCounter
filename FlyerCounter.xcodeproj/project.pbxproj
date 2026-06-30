@@ -37,6 +37,7 @@
 		A1000001000000000000001E /* PlannedRouteDivergenceFlyerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000001E /* PlannedRouteDivergenceFlyerDetector.swift */; };
 		A1000001000000000000001F /* RoutePlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000002000000000000001F /* RoutePlannerView.swift */; };
 		A10000010000000000000020 /* PathBacktrackFlyerDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000020 /* PathBacktrackFlyerDetector.swift */; };
+		A10000010000000000000021 /* SettingsLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000020000000000000021 /* SettingsLock.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -70,6 +71,7 @@
 		A1000002000000000000001E /* PlannedRouteDivergenceFlyerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannedRouteDivergenceFlyerDetector.swift; sourceTree = "<group>"; };
 		A1000002000000000000001F /* RoutePlannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutePlannerView.swift; sourceTree = "<group>"; };
 		A10000020000000000000020 /* PathBacktrackFlyerDetector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathBacktrackFlyerDetector.swift; sourceTree = "<group>"; };
+		A10000020000000000000021 /* SettingsLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsLock.swift; sourceTree = "<group>"; };
 		A10000030000000000000001 /* FlyerCounter.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = FlyerCounter.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -124,6 +126,7 @@
 				A1000002000000000000001E /* PlannedRouteDivergenceFlyerDetector.swift */,
 				A1000002000000000000001F /* RoutePlannerView.swift */,
 				A10000020000000000000020 /* PathBacktrackFlyerDetector.swift */,
+				A10000020000000000000021 /* SettingsLock.swift */,
 				A10000020000000000000003 /* Assets.xcassets */,
 			);
 			path = FlyerCounter;
@@ -234,6 +237,7 @@
 				A1000001000000000000001E /* PlannedRouteDivergenceFlyerDetector.swift in Sources */,
 				A1000001000000000000001F /* RoutePlannerView.swift in Sources */,
 				A10000010000000000000020 /* PathBacktrackFlyerDetector.swift in Sources */,
+				A10000010000000000000021 /* SettingsLock.swift in Sources */,
 				A10000010000000000000001 /* FlyerCounterApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

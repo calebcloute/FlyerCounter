@@ -49,7 +49,6 @@ struct VoiceAnnouncementSettings: Codable, Equatable {
 }
 
 struct AutoFlyerSettings: Codable, Equatable {
-    var isEnabled: Bool = false
     var isVoiceFeedbackEnabled: Bool = false
     var voiceAnnouncements = VoiceAnnouncementSettings()
     var method: AutoFlyerCountingMethod = .compassTurnaround
@@ -80,7 +79,6 @@ enum AutoFlyerSettingsStorage {
 
     private static func migrateLegacySettings(from data: Data) -> AutoFlyerSettings {
         struct LegacyAutoFlyerSettings: Codable {
-            var isEnabled: Bool = false
             var compassTurnaround: CompassTurnaroundSettings = CompassTurnaroundSettings()
         }
 
@@ -88,10 +86,7 @@ enum AutoFlyerSettingsStorage {
             return AutoFlyerSettings()
         }
 
-        return AutoFlyerSettings(
-            isEnabled: legacy.isEnabled,
-            turnaround: legacy.compassTurnaround
-        )
+        return AutoFlyerSettings(turnaround: legacy.compassTurnaround)
     }
 }
 
@@ -99,29 +94,57 @@ enum AutoFlyerSettingsStorage {
 final class AutoFlyerSettingsStore: ObservableObject {
     @Published var settings: AutoFlyerSettings {
         didSet {
+            if let settingsLockStore {
+                let enforced = settingsLockStore.enforcedAutoFlyerSettings(settings)
+                if enforced != settings {
+                    settings = enforced
+                    return
+                }
+            }
             AutoFlyerSettingsStorage.save(settings)
         }
     }
 
+    private var settingsLockStore: SettingsLockStore?
+
     init() {
         settings = AutoFlyerSettingsStorage.load()
+    }
+
+    func bind(settingsLockStore: SettingsLockStore) {
+        self.settingsLockStore = settingsLockStore
+        applySettingsLock(from: settingsLockStore)
+    }
+
+    func applySettingsLock(from settingsLockStore: SettingsLockStore) {
+        let enforced = settingsLockStore.enforcedAutoFlyerSettings(settings)
+        if enforced != settings {
+            settings = enforced
+        } else {
+            AutoFlyerSettingsStorage.save(settings)
+        }
     }
 }
 
 struct CompassTurnaroundSettingsSection: View {
     @Binding var settings: CompassTurnaroundSettings
+    var isLocked = false
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Turn threshold: \(Int(settings.turnaroundThresholdDegrees))°")
-                Slider(value: $settings.turnaroundThresholdDegrees, in: 120...180, step: 5)
-            }
+            lockedSliderRow(
+                title: "Turn threshold: \(Int(settings.turnaroundThresholdDegrees))°",
+                value: $settings.turnaroundThresholdDegrees,
+                range: 120...180,
+                step: 5
+            )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Cooldown: \(Int(settings.cooldownSeconds)) s")
-                Slider(value: $settings.cooldownSeconds, in: 3...30, step: 1)
-            }
+            lockedSliderRow(
+                title: "Cooldown: \(Int(settings.cooldownSeconds)) s",
+                value: $settings.cooldownSeconds,
+                range: 3...30,
+                step: 1
+            )
         } header: {
             Text("Turnaround")
         } footer: {
@@ -133,47 +156,81 @@ struct CompassTurnaroundSettingsSection: View {
             .foregroundStyle(.secondary)
         }
     }
+
+    @ViewBuilder
+    private func lockedSliderRow(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double
+    ) -> some View {
+        if isLocked {
+            Text(title + " (locked)")
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                Slider(value: value, in: range, step: step)
+            }
+        }
+    }
 }
 
 struct AutomaticFlyerCountingSection: View {
     @ObservedObject var store: AutoFlyerSettingsStore
+    @ObservedObject var settingsLockStore: SettingsLockStore
+
+    private var isLocked: Bool { settingsLockStore.isLocked }
 
     var body: some View {
         Section {
-            Toggle("Enable automatic counting", isOn: $store.settings.isEnabled)
-        } header: {
-            Text("Automatic Flyer Counting")
-        } footer: {
-            Text(
-                "Uses turnaround compass detection, path backtrack overlap, or planned-route divergence " +
-                "while a route is recording. Use -1 Flyer to undo a mistaken auto count. Each auto count gives one vibration " +
-                "in the app, or a notification on the lock screen. Voice announcements work on the lock screen " +
-                "when Speak testing announcements is on."
-            )
-            .foregroundStyle(.secondary)
-        }
-
-        if store.settings.isEnabled {
-            Toggle("Speak testing announcements", isOn: $store.settings.isVoiceFeedbackEnabled)
-
-            if store.settings.isVoiceFeedbackEnabled {
-                VoiceAnnouncementSettingsSection(settings: $store.settings.voiceAnnouncements)
-            }
-
             Picker("Counting method", selection: $store.settings.method) {
                 ForEach(AutoFlyerCountingMethod.allCases) { method in
                     Text(method.title).tag(method)
                 }
             }
-
-            switch store.settings.method {
-            case .compassTurnaround:
-                CompassTurnaroundSettingsSection(settings: $store.settings.turnaround)
-            case .pathBacktrack:
-                PathBacktrackSettingsSection(settings: $store.settings.pathBacktrack)
-            case .plannedRouteDivergence:
-                PlannedRouteDetectionSettingsSection(settings: $store.settings.plannedRoute)
+            .disabled(isLocked)
+        } header: {
+            Text("Flyer Counting")
+        } footer: {
+            if isLocked {
+                Text(
+                    "Counting method and thresholds are locked. " +
+                    "Unlock in Lock Counting Method Settings to change them."
+                )
+                .foregroundStyle(.orange)
+            } else {
+                Text(
+                    "Flyers are counted automatically while a route is recording using the method you choose. " +
+                    "Use -1 Flyer to undo a mistaken count. Each count gives one vibration in the app, or a notification " +
+                    "on the lock screen. Voice announcements work on the lock screen when Speak testing announcements is on."
+                )
+                .foregroundStyle(.secondary)
             }
+        }
+
+        Toggle("Speak testing announcements", isOn: $store.settings.isVoiceFeedbackEnabled)
+
+        if store.settings.isVoiceFeedbackEnabled {
+            VoiceAnnouncementSettingsSection(settings: $store.settings.voiceAnnouncements)
+        }
+
+        switch store.settings.method {
+        case .compassTurnaround:
+            CompassTurnaroundSettingsSection(
+                settings: $store.settings.turnaround,
+                isLocked: isLocked
+            )
+        case .pathBacktrack:
+            PathBacktrackSettingsSection(
+                settings: $store.settings.pathBacktrack,
+                isLocked: isLocked
+            )
+        case .plannedRouteDivergence:
+            PlannedRouteDetectionSettingsSection(
+                settings: $store.settings.plannedRoute,
+                isLocked: isLocked
+            )
         }
     }
 }
@@ -202,28 +259,37 @@ struct VoiceAnnouncementSettingsSection: View {
 
 struct PathBacktrackSettingsSection: View {
     @Binding var settings: PathBacktrackSettings
+    var isLocked = false
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Distance from path line: \(Int(settings.overlapRadiusMeters)) m")
-                Slider(value: $settings.overlapRadiusMeters, in: 2...8, step: 1)
-            }
+            lockedSliderRow(
+                title: "Distance from path line: \(Int(settings.overlapRadiusMeters)) m",
+                value: $settings.overlapRadiusMeters,
+                range: 2...8,
+                step: 1
+            )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Min path behind furthest point: \(Int(settings.minBacktrackSeparationMeters)) m")
-                Slider(value: $settings.minBacktrackSeparationMeters, in: 6...25, step: 1)
-            }
+            lockedSliderRow(
+                title: "Min path behind furthest point: \(Int(settings.minBacktrackSeparationMeters)) m",
+                value: $settings.minBacktrackSeparationMeters,
+                range: 6...25,
+                step: 1
+            )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Cooldown: \(Int(settings.cooldownSeconds)) s")
-                Slider(value: $settings.cooldownSeconds, in: 3...30, step: 1)
-            }
+            lockedSliderRow(
+                title: "Cooldown: \(Int(settings.cooldownSeconds)) s",
+                value: $settings.cooldownSeconds,
+                range: 3...30,
+                step: 1
+            )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Max GPS accuracy: \(Int(settings.maximumGPSAccuracyMeters)) m")
-                Slider(value: $settings.maximumGPSAccuracyMeters, in: 10...40, step: 5)
-            }
+            lockedSliderRow(
+                title: "Max GPS accuracy: \(Int(settings.maximumGPSAccuracyMeters)) m",
+                value: $settings.maximumGPSAccuracyMeters,
+                range: 10...40,
+                step: 5
+            )
         } header: {
             Text("Path Backtrack")
         } footer: {
@@ -236,32 +302,59 @@ struct PathBacktrackSettingsSection: View {
             .foregroundStyle(.secondary)
         }
     }
+
+    @ViewBuilder
+    private func lockedSliderRow(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double
+    ) -> some View {
+        if isLocked {
+            Text(title + " (locked)")
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                Slider(value: value, in: range, step: step)
+            }
+        }
+    }
 }
 
 struct PlannedRouteDetectionSettingsSection: View {
     @Binding var settings: PlannedRouteDetectionSettings
+    var isLocked = false
 
     var body: some View {
         Section {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Near plan: \(Int(settings.nearPlanMeters)) m")
-                Slider(value: $settings.nearPlanMeters, in: 2...8, step: 1)
-            }
+            lockedSliderRow(
+                title: "Near plan: \(Int(settings.nearPlanMeters)) m",
+                value: $settings.nearPlanMeters,
+                range: 2...8,
+                step: 1
+            )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Divergence threshold: \(Int(settings.divergenceThresholdMeters)) m")
-                Slider(value: $settings.divergenceThresholdMeters, in: 4...15, step: 1)
-            }
+            lockedSliderRow(
+                title: "Divergence threshold: \(Int(settings.divergenceThresholdMeters)) m",
+                value: $settings.divergenceThresholdMeters,
+                range: 4...15,
+                step: 1
+            )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Cooldown: \(Int(settings.cooldownSeconds)) s")
-                Slider(value: $settings.cooldownSeconds, in: 3...30, step: 1)
-            }
+            lockedSliderRow(
+                title: "Cooldown: \(Int(settings.cooldownSeconds)) s",
+                value: $settings.cooldownSeconds,
+                range: 3...30,
+                step: 1
+            )
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Max GPS accuracy: \(Int(settings.maximumGPSAccuracyMeters)) m")
-                Slider(value: $settings.maximumGPSAccuracyMeters, in: 10...40, step: 5)
-            }
+            lockedSliderRow(
+                title: "Max GPS accuracy: \(Int(settings.maximumGPSAccuracyMeters)) m",
+                value: $settings.maximumGPSAccuracyMeters,
+                range: 10...40,
+                step: 5
+            )
         } header: {
             Text("Planned Route")
         } footer: {
@@ -271,6 +364,24 @@ struct PlannedRouteDetectionSettingsSection: View {
                 "Choose an active plan in the Route Planner tab."
             )
             .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func lockedSliderRow(
+        title: String,
+        value: Binding<Double>,
+        range: ClosedRange<Double>,
+        step: Double
+    ) -> some View {
+        if isLocked {
+            Text(title + " (locked)")
+                .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(title)
+                Slider(value: value, in: range, step: step)
+            }
         }
     }
 }

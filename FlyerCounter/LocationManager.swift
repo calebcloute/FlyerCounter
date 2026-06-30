@@ -202,7 +202,6 @@ final class LocationManager: NSObject, ObservableObject {
 
     private func startAutoFlyerEvaluationLoopIfNeeded() {
         guard isTracking,
-              autoFlyerSettings.isEnabled,
               autoFlyerSettings.method == .compassTurnaround,
               CLLocationManager.headingAvailable() else {
             stopAutoFlyerEvaluationLoop()
@@ -220,7 +219,6 @@ final class LocationManager: NSObject, ObservableObject {
 
             while !Task.isCancelled {
                 guard isTracking,
-                      autoFlyerSettings.isEnabled,
                       autoFlyerSettings.method == .compassTurnaround else {
                     break
                 }
@@ -242,7 +240,6 @@ final class LocationManager: NSObject, ObservableObject {
 
     private func refreshBackgroundAutoFlyerHeadingIfNeeded() {
         guard isTracking,
-              autoFlyerSettings.isEnabled,
               autoFlyerSettings.method == .compassTurnaround,
               CLLocationManager.headingAvailable() else { return }
 
@@ -265,9 +262,7 @@ final class LocationManager: NSObject, ObservableObject {
     func updateAutoFlyerSettings(_ settings: AutoFlyerSettings) {
         autoFlyerSettings = settings
         refreshHeadingUpdatesIfNeeded()
-        if settings.isEnabled {
-            AutoFlyerCountFeedback.requestAuthorizationIfNeeded()
-        }
+        AutoFlyerCountFeedback.requestAuthorizationIfNeeded()
     }
 
     func updateBoundaryAlertSettings(_ settings: BoundaryAlertSettings) {
@@ -733,7 +728,6 @@ final class LocationManager: NSObject, ObservableObject {
 
     private func refreshHeadingUpdatesIfNeeded() {
         guard isTracking,
-              autoFlyerSettings.isEnabled,
               autoFlyerSettings.method == .compassTurnaround,
               CLLocationManager.headingAvailable() else {
             manager.stopUpdatingHeading()
@@ -750,13 +744,12 @@ final class LocationManager: NSObject, ObservableObject {
 
     private func refreshAutoFlyerMonitoring() {
         let shouldDetect = isTracking
-            && autoFlyerSettings.isEnabled
             && autoFlyerSettings.method == .compassTurnaround
             && CLLocationManager.headingAvailable()
 
         guard shouldDetect else {
             stopAutoFlyerEvaluationLoop()
-            if !isTracking || !autoFlyerSettings.isEnabled {
+            if !isTracking {
                 autoFlyerDetectionStatus = nil
                 autoFlyerStatusUpdatedAt = nil
             }
@@ -896,7 +889,7 @@ final class LocationManager: NSObject, ObservableObject {
     }
 
     private func evaluateAutomaticFlyerCounting(for location: CLLocation? = nil) {
-        guard isTracking, autoFlyerSettings.isEnabled else { return }
+        guard isTracking else { return }
 
         let evaluation: AutoFlyerEvaluation
         let dropSource: FlyerDropSource
@@ -1063,9 +1056,7 @@ extension LocationManager: CLLocationManagerDelegate {
                 recordSessionAnalytics(for: location)
                 lastTravelHeadingLocation = location
                 appendRoutePoint(from: location)
-                if autoFlyerSettings.isEnabled {
-                    evaluateAutomaticFlyerCounting(for: location)
-                }
+                evaluateAutomaticFlyerCounting(for: location)
             }
             checkActiveBoundaryProximity(for: location)
         }
@@ -1074,7 +1065,7 @@ extension LocationManager: CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {
         Task { @MainActor in
             updateDeviceHeading(from: newHeading)
-            if isTracking, autoFlyerSettings.isEnabled {
+            if isTracking {
                 switch autoFlyerSettings.method {
                 case .compassTurnaround:
                     evaluateAutomaticFlyerCounting()
